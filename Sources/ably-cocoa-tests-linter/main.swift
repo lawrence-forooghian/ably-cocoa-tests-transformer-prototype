@@ -33,7 +33,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
     private func visit(_ node: FunctionDeclSyntax) -> Syntax {
         switch (node.identifier.text) {
         case "setUp", "tearDown":
-            print("TODO address setUp and tearDown")
+            print("TODO handle class-level `setUp` and `tearDown`")
             return Syntax(node)
         case "spec":
             
@@ -67,7 +67,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             if (isAuditedForPassthrough(node)) {
                 return Syntax(node)
             }
-            fatalError("Don't know how to handle function \(node.identifier) in \(containingClassName)")
+            fatalError("Don't know how to handle class-level function \(node.identifier) in \(containingClassName)")
         }
     }
         
@@ -97,7 +97,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
                 }
                 
                 // Not exactly sure what .text is but it seems to not have whitespace / comments etc
-                print("TODO handle `\(identifierExpression.identifier.text)`")
+                print("TODO handle spec()-level `\(identifierExpression.identifier.text)`")
                 
                 return nil
             }
@@ -111,7 +111,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
                 // This is just a couple, search rsh3a2(), rsh3a2a(). Might
                 // be simplest just to refactor this by hand first
-                print("it's a function declaration \(functionDeclaration.identifier) TODO do something")
+                print("TODO handle spec()-level function declaration `\(functionDeclaration.identifier)`")
                 return nil
             } else {
                 preconditionFailure("I don't know how to handle this thing")
