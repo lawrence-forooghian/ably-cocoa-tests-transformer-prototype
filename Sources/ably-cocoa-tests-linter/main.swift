@@ -2,6 +2,8 @@ import SwiftSyntax
 import Foundation
 
 // TODO what about stuff like comments – do they come through?
+// https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
+// what should we do with the xit test cases?
 
 // Transforms the `spec` method of a QuickSpec subclass.
 class TransformQuickSpecMethods: SyntaxRewriter {
@@ -17,22 +19,18 @@ class TransformQuickSpecMethods: SyntaxRewriter {
         return allowList.contains([containingClassName, node.identifier.text])
     }
     
+    // TODO get rid of this and directly modify the class's members instead of spitting out a struct
     override func visitAny(_ node: Syntax) -> Syntax? {
         // I'm trying to figure out how to return something other than a DeclSyntax from a visit(FunctionDeclSyntax), I think it's using this visitAny
-        
-        debugPrint(node.syntaxNodeType)
-        
+                
         guard let functionDecl = FunctionDeclSyntax(node) else {
             return nil // I think this means "do your usual thing, I won't give you anything different here"
         }
-
-        print("it's a function decl")
         
         return visit(functionDecl)
     }
     
     private func visit(_ node: FunctionDeclSyntax) -> Syntax {
-        print("HERE")
         switch (node.identifier.text) {
         case "setUp", "tearDown":
             print("TODO address setUp and tearDown")
@@ -40,12 +38,12 @@ class TransformQuickSpecMethods: SyntaxRewriter {
         case "spec":
             
             // So, what we've learned here is that you can grab all of the variable declarations from inside the spec() function, and spit them out as the memebr variables of a new struct. But that for whatever reason it's not easy (/ possible?) So what we'll do is return a list of items and then add those into the member list of the class (and if that doesn't work then we'll just create a new class).
-            let memberDeclListItems = getSpecMemberDeclListItems(node)
             
+            let memberDeclListItems = getSpecMemberDeclListItems(node)
             
             let structKeyword = SyntaxFactory.makeStructKeyword(trailingTrivia: .spaces(1))
 
-            let identifier = SyntaxFactory.makeIdentifier("Example", trailingTrivia: .spaces(1))
+            let identifier = SyntaxFactory.makeIdentifier("PlaceholderTODORemoveAndPutInsideClass", trailingTrivia: .spaces(1))
 
             let leftBrace = SyntaxFactory.makeLeftBraceToken()
             let rightBrace = SyntaxFactory.makeRightBraceToken(leadingTrivia: .newlines(1))
@@ -64,15 +62,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
                 builder.useMembers(members)
             }
             
-            
-            
             return Syntax(structureDeclaration)
-
-            // this does _not_ work – gives that same assertion failure in MemberDeclListItemSyntax _validateLayout() - so there's something funny going on with attempting to grab a MemberDeclList directly
-//            return Syntax(structureDeclaration.members.members)
-
-            
-//            return Syntax(transformSpec(node))
         default:
             if (isAuditedForPassthrough(node)) {
                 return Syntax(node)
@@ -80,111 +70,55 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             fatalError("Don't know how to handle function \(node.identifier) in \(containingClassName)")
         }
     }
-    
-    // TODO what do we do about other declarations, like variables etc?
-    
-    private func getSpecMemberDeclListItems(_ node: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
-//    private func transformSpec(_ node: FunctionDeclSyntax) -> Syntax {
-        print("TODO address spec")
         
+    private func getSpecMemberDeclListItems(_ node: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
         // I think we want to lift the whole body of spec() and pull it out to the class body, keeping the variable declarations etc (see e.g. RestClient's spec)
         
         // Then what do we do with the describe / it?
         
-        // https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
-        // what should we do with the xit test cases?
-        
         guard let body = node.body else {
             fatalError("Don’t know how to handle function declaration without a body")
         }
-        
-        // Our aim now is to return a MemberDeclListItemSyntax
-        
-        // OK, it doesn't like this
-        // I think we need to return a MemberDeclListItemSyntax or something like that
-        
-        /*
-         class-members → class-member class-members opt
-         class-member → declaration | compiler-control-statement
-        */
-        // OK, we need to build a bunch of MemberDeclListItemSyntax (I think by grabbing the calls from the body and turning them into declarations) and then figure out how to turn them into a list
 
-        
-        body.statements.forEach { statement in
-            print(statement.syntaxNodeType)
-            print(statement)
+        let memberDeclListItems = body.statements.compactMap { statement -> MemberDeclListItemSyntax? in
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
             // TODO what if there's stuff that clashes?
 
             if let variableDeclaration = VariableDeclSyntax(statement.item) {
-                print("it's a variable declaration")
+                // Variable declarations just get hoisted outside of spec()
+                
+                let decl = DeclSyntax(variableDeclaration)
+                return MemberDeclListItemSyntax { builder in builder.useDecl(decl) }
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
-                print("it's a function call")
+                guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
+                    preconditionFailure("Expected an identifier")
+                }
+                
+                // Not exactly sure what .text is but it seems to not have whitespace / comments etc
+                print("TODO handle `\(identifierExpression.identifier.text)`")
+                
+                return nil
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
-                // there's just one (ExpectedTokenParams)
-                print("it's a struct declaration")
+                // Struct declarations just get hoisted outside of spec()
+                // We only have one of these
+                
+                let decl = DeclSyntax(structDeclaration)
+                return MemberDeclListItemSyntax { builder in builder.useDecl(decl) }
             }
             else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
-                // TODO I think this is just a couple, search rsh3a2a()
-                print("it's a function declaration")
+                // This is just a couple, search rsh3a2(), rsh3a2a(). Might
+                // be simplest just to refactor this by hand first
+                print("it's a function declaration \(functionDeclaration.identifier) TODO do something")
+                return nil
             } else {
-                assertionFailure("I don't know how to handle this thing")
+                preconditionFailure("I don't know how to handle this thing")
             }
         }
 
-        let variableDeclarations = body.statements.compactMap { statement in
-            VariableDeclSyntax(statement.item)
-        }
-        let memberDeclListItems = variableDeclarations.map { variableDeclaration -> MemberDeclListItemSyntax in
-            let decl = DeclSyntax(variableDeclaration)
-            print("created decl \(decl)")
-            let memberDeclListItem = MemberDeclListItemSyntax { builder in builder.useDecl(decl) }
-            print("created memberDeclListItem \(memberDeclListItem)")
-            memberDeclListItem._validateLayout()
-            print("validated")
-            // Hmm, those are validating, so what's failing???
-            return memberDeclListItem
-        }
-        
         return memberDeclListItems
-    
-        // no idea if this is the right way to create one
-        // now something is failing on // Check child #0 child is DeclSyntax
-//        let memberDeclList = SyntaxFactory.makeMemberDeclList(memberDeclListItems)
-//        print("created memberDeclList \(memberDeclList)")
-//        memberDeclList._validateLayout()
-//        print(memberDeclList.children.count)
-//        print(memberDeclList.children)
-//        print("validated")
-        
-        // What's failing? I would love a backtrace (OK, I'm now just using swift package edit to do print-debugging)
-        
-        // there seems to be some weird Franken-MemberDeclListItemSyntax that has loads of declarations; where's that coming from?
-        
-//        let memberDeclList = SyntaxFactory.makeBlankMemberDeclList().inserting(memberDeclListItems[0], at: 0)
-//
-//        print("created list")
-//        memberDeclList._validateLayout()
-//        print("validated list")
-        
-        // so even with one item, this is messed up; what's happening, why is making this decl list making some messed up decl?
-        // and a blank list is no better…
-    
-//        // copied from https://nshipster.com/swiftsyntax/
-//        let leftBrace = SyntaxFactory.makeLeftBraceToken()
-//        let rightBrace = SyntaxFactory.makeRightBraceToken(leadingTrivia: .newlines(1))
-//        let members = MemberDeclBlockSyntax { builder in
-//            builder.useLeftBrace(leftBrace)
-//            builder.useRightBrace(rightBrace)
-//        }
-//
-//        print(members)
-//        // their creation of a structure declaration does work if we just dump it into a file, there's something about the way I"m trying to use it that it doesn't like
-//
-//        return members.members // nope, this gives the same assertion
     }
 }
 
@@ -223,8 +157,7 @@ class TransformQuickSpec: SyntaxRewriter {
 //        let token = typeName.firstToken!
 
         let newToken = SyntaxFactory.makeToken(.identifier("XCTestCase"), presence: .present)
-        // TODO I think we can use SyntaxFactory for this
-//        let newToken = token.withKind(.identifier("XCTestCase")) // TODO how to create this? Seems weird that I need an existing token to create a new one – isn't there a "token builder"?
+//        let newToken = token.withKind(.identifier("XCTestCase")) // I'm keeping this around in case it helps with getting whitespace right
                 
         let typeIdentifier = SimpleTypeIdentifierSyntax({ builder in builder.useName(newToken) })
         
