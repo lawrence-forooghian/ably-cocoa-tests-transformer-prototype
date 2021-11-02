@@ -1,6 +1,8 @@
 import SwiftSyntax
 import Foundation
 
+// TODO what about stuff like comments – do they come through?
+
 // Transforms the `spec` method of a QuickSpec subclass.
 class TransformQuickSpecMethods: SyntaxRewriter {
     private let containingClassName: String
@@ -113,11 +115,23 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             print(statement)
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
-            // TODO what about stuff like comments?
             // TODO what if there's stuff that clashes?
 
             if let variableDeclaration = VariableDeclSyntax(statement.item) {
                 print("it's a variable declaration")
+            }
+            else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
+                print("it's a function call")
+            }
+            else if let structDeclaration = StructDeclSyntax(statement.item) {
+                // there's just one (ExpectedTokenParams)
+                print("it's a struct declaration")
+            }
+            else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
+                // TODO I think this is just a couple, search rsh3a2a()
+                print("it's a function declaration")
+            } else {
+                assertionFailure("I don't know how to handle this thing")
             }
         }
 
@@ -239,5 +253,5 @@ try swiftFiles.forEach { fileName in
     let sourceFile = try SyntaxParser.parse(url)
     let transformed = TransformQuickSpec().visit(sourceFile)
     
-    try String(describing: transformed).write(to: url, atomically: true, encoding: .utf8)
+//    try String(describing: transformed).write(to: url, atomically: true, encoding: .utf8)
 }
