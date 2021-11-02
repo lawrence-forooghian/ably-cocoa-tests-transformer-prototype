@@ -36,33 +36,8 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             print("TODO handle class-level `setUp` and `tearDown`")
             return Syntax(node)
         case "spec":
-            
-            // So, what we've learned here is that you can grab all of the variable declarations from inside the spec() function, and spit them out as the memebr variables of a new struct. But that for whatever reason it's not easy (/ possible?) So what we'll do is return a list of items and then add those into the member list of the class (and if that doesn't work then we'll just create a new class).
-            
-            let memberDeclListItems = getSpecMemberDeclListItems(node)
-            
-            let structKeyword = SyntaxFactory.makeStructKeyword(trailingTrivia: .spaces(1))
-
-            let identifier = SyntaxFactory.makeIdentifier("PlaceholderTODORemoveAndPutInsideClass", trailingTrivia: .spaces(1))
-
-            let leftBrace = SyntaxFactory.makeLeftBraceToken()
-            let rightBrace = SyntaxFactory.makeRightBraceToken(leadingTrivia: .newlines(1))
-            let members = MemberDeclBlockSyntax { builder in
-                builder.useLeftBrace(leftBrace)
-                builder.useRightBrace(rightBrace)
-                
-                memberDeclListItems.forEach { item in
-                    builder.addMember(item)
-                }
-            }
-
-            let structureDeclaration = StructDeclSyntax { builder in
-                builder.useStructKeyword(structKeyword)
-                builder.useIdentifier(identifier)
-                builder.useMembers(members)
-            }
-            
-            return Syntax(structureDeclaration)
+            let classLevelDeclarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(node)
+            return embedDeclarationsInStruct(classLevelDeclarations)
         default:
             if (isAuditedForPassthrough(node)) {
                 return Syntax(node)
@@ -70,17 +45,44 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             fatalError("Don't know how to handle class-level function \(node.identifier) in \(containingClassName)")
         }
     }
+    
+    private func embedDeclarationsInStruct(_ declarations: [MemberDeclListItemSyntax]) -> Syntax {
+        // So, what we've learned here is that you can grab all of the variable declarations from inside the spec() function, and spit them out as the memebr variables of a new struct. But that for whatever reason it's not easy (/ possible?) So what we'll do is return a list of items and then add those into the member list of the class (and if that doesn't work then we'll just create a new class).
         
-    private func getSpecMemberDeclListItems(_ node: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
+        let structKeyword = SyntaxFactory.makeStructKeyword(trailingTrivia: .spaces(1))
+
+        let identifier = SyntaxFactory.makeIdentifier("PlaceholderTODORemoveAndPutInsideClass", trailingTrivia: .spaces(1))
+
+        let leftBrace = SyntaxFactory.makeLeftBraceToken()
+        let rightBrace = SyntaxFactory.makeRightBraceToken(leadingTrivia: .newlines(1))
+        let members = MemberDeclBlockSyntax { builder in
+            builder.useLeftBrace(leftBrace)
+            builder.useRightBrace(rightBrace)
+            
+            declarations.forEach { item in
+                builder.addMember(item)
+            }
+        }
+
+        let structureDeclaration = StructDeclSyntax { builder in
+            builder.useStructKeyword(structKeyword)
+            builder.useIdentifier(identifier)
+            builder.useMembers(members)
+        }
+        
+        return Syntax(structureDeclaration)
+    }
+        
+    private func transformSpecFunctionDeclarationIntoClassLevelDeclarations(_ specFunctionDeclaration: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
         // I think we want to lift the whole body of spec() and pull it out to the class body, keeping the variable declarations etc (see e.g. RestClient's spec)
         
         // Then what do we do with the describe / it?
         
-        guard let body = node.body else {
+        guard let specFunctionBody = specFunctionDeclaration.body else {
             fatalError("Don’t know how to handle function declaration without a body")
         }
 
-        let memberDeclListItems = body.statements.compactMap { statement -> MemberDeclListItemSyntax? in
+        let memberDeclListItems = specFunctionBody.statements.compactMap { statement -> MemberDeclListItemSyntax? in
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
             // TODO what if there's stuff that clashes?
