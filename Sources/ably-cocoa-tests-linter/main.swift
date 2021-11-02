@@ -1,7 +1,69 @@
 import SwiftSyntax
-import Foundation 
+import Foundation
 
-// rewrites subclasses of QuickSpec to XCTestCase
+// Transforms the `spec` method of a QuickSpec subclass.
+class TransformQuickSpecMethods: SyntaxRewriter {
+    private let containingClassName: String
+    
+    init(containingClassName: String) {
+        self.containingClassName = containingClassName
+    }
+    
+    private func isAuditedForPassthrough(_ node: FunctionDeclSyntax) -> Bool {
+        let allowList = [["RealtimeClient", "checkError"]]
+        
+        return allowList.contains([containingClassName, node.identifier.text])
+    }
+    
+    override func visitAny(_ node: Syntax) -> Syntax? {
+        // I'm trying to figure out how to return something other than a DeclSyntax from a visit(FunctionDeclSyntax), I think it's using this visitAny
+        
+        debugPrint(node.syntaxNodeType)
+        
+        guard let functionDecl = FunctionDeclSyntax(node) else {
+            return nil // I think this means "do your usual thing, I won't give you anything different here"
+        }
+
+        print("it's a function decl")
+        
+        return visit(functionDecl)
+    }
+    
+    private func visit(_ node: FunctionDeclSyntax) -> Syntax {
+        print("HERE")
+        switch (node.identifier.text) {
+        case "setUp", "tearDown":
+            print("TODO address setUp and tearDown")
+            return Syntax(node)
+        case "spec":
+            return transformSpec(node)
+        default:
+            if (isAuditedForPassthrough(node)) {
+                return Syntax(node)
+            }
+            fatalError("Don't know how to handle function \(node.identifier) in \(containingClassName)")
+        }
+    }
+    
+    // TODO what do we do about other declarations, like variables etc?
+    
+    private func transformSpec(_ node: FunctionDeclSyntax) -> Syntax {
+        print("TODO address spec")
+        
+        // I think we want to lift the whole body of spec() and pull it out to the class body, keeping the variable declarations etc (see e.g. RestClient's spec)
+        
+        // Then what do we do with the describe / it?
+        
+        // https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
+        // what should we do with the xit test cases?
+        
+        print(node.identifier)
+        
+        return Syntax(node)
+    }
+}
+
+// Transforms subclasses of QuickSpec to XCTestCase
 class TransformQuickSpec: SyntaxRewriter {
     override func visit(_ node: ClassDeclSyntax) -> DeclSyntax {
         guard let inheritanceClause = node.inheritanceClause else {
@@ -49,7 +111,7 @@ class TransformQuickSpec: SyntaxRewriter {
         let newInheritanceClause = inheritanceClause.withInheritedTypeCollection(newInheritedTypes)
         let newNode = node.withInheritanceClause(newInheritanceClause)
         
-        return DeclSyntax(newNode)
+        return TransformQuickSpecMethods(containingClassName: node.identifier.text).visit(newNode)
     }
 }
 
@@ -65,9 +127,4 @@ try swiftFiles.forEach { fileName in
     let transformed = TransformQuickSpec().visit(sourceFile)
     
     try String(describing: transformed).write(to: url, atomically: true, encoding: .utf8)
-    
-    print(transformed)
 }
-
-// https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
-// what should we do with the xit test cases?
