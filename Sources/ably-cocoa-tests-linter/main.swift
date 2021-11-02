@@ -82,7 +82,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             fatalError("Don’t know how to handle function declaration without a body")
         }
 
-        let memberDeclListItems = specFunctionBody.statements.compactMap { statement -> MemberDeclListItemSyntax? in
+        let memberDeclListItems = specFunctionBody.statements.compactMap { statement -> [MemberDeclListItemSyntax]? in
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
             // TODO what if there's stuff that clashes?
@@ -91,24 +91,17 @@ class TransformQuickSpecMethods: SyntaxRewriter {
                 // Variable declarations just get hoisted outside of spec()
                 
                 let decl = DeclSyntax(variableDeclaration)
-                return MemberDeclListItemSyntax { builder in builder.useDecl(decl) }
+                return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
-                guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
-                    preconditionFailure("Expected an identifier")
-                }
-                
-                // Not exactly sure what .text is but it seems to not have whitespace / comments etc
-                print("TODO handle spec()-level `\(identifierExpression.identifier.text)`")
-                
-                return nil
+                return transformFunctionCallInsideSpecIntoClassLevelDeclarations(functionCallExpr)
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
                 // Struct declarations just get hoisted outside of spec()
                 // We only have one of these
                 
                 let decl = DeclSyntax(structDeclaration)
-                return MemberDeclListItemSyntax { builder in builder.useDecl(decl) }
+                return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
             else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
                 // This is just a couple, search rsh3a2(), rsh3a2a(). Might
@@ -118,10 +111,22 @@ class TransformQuickSpecMethods: SyntaxRewriter {
             } else {
                 preconditionFailure("I don't know how to handle this thing")
             }
-        }
+        }.flatMap { $0 }
 
         return memberDeclListItems
     }
+    
+    private func transformFunctionCallInsideSpecIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax) -> [MemberDeclListItemSyntax] {
+        guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
+            preconditionFailure("Expected an identifier")
+        }
+        
+        // Not exactly sure what .text is but it seems to not have whitespace / comments etc
+        print("TODO handle spec()-level `\(identifierExpression.identifier.text)`")
+        
+        return []
+    }
+    
 }
 
 // Transforms subclasses of QuickSpec to XCTestCase
