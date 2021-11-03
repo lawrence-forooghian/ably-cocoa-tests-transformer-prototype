@@ -122,9 +122,59 @@ class TransformQuickSpecMethods: SyntaxRewriter {
         }
         
         // Not exactly sure what .text is but it seems to not have whitespace / comments etc
-        print("TODO handle spec()-level `\(identifierExpression.identifier.text)`")
+        let calledFunctionName = identifierExpression.identifier.text
         
-        return []
+        switch (calledFunctionName) {
+        case "it":
+            print("handle it")
+            
+            precondition(functionCallExpr.argumentList.count == 1, "`it` should only take one argument")
+            
+            // OK, this is a ExprSyntax, how do I find out whether it's a string literal?
+            let argumentExpression = functionCallExpr.argumentList.first!.expression
+
+            guard let stringLiteralExpression = argumentExpression.as(StringLiteralExprSyntax.self) else {
+                preconditionFailure("Expected the one argument to `it` to be a string literal describing the test")
+            }
+            
+            precondition(stringLiteralExpression.segments.count == 1, "the argument to `it` I'm expecting to only have one segment")
+            
+            let firstSegment = stringLiteralExpression.segments.first!
+            // TODO is this okay? Wasn't sure how to keep drilling
+            let testDescription = firstSegment.firstToken!.text
+            
+            // Now we grab the trailing closure from the call to `it` and use that as the new test method's body
+            
+            guard let trailingClosure = functionCallExpr.trailingClosure else {
+                preconditionFailure("I expect a call to `it` to have a trailing closure")
+            }
+            
+            guard trailingClosure.signature == nil else {
+                preconditionFailure("I don't expect the trailing closure to have any signature")
+            }
+                        
+            let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
+                attributes: nil,
+                modifiers: nil,
+                funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
+                identifier: SyntaxFactory.makeIdentifier(testDescription) /* TODO this needs sanitizing */,
+                genericParameterClause: nil,
+                signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
+                genericWhereClause: nil,
+                body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace, statements: trailingClosure.statements, rightBrace: trailingClosure.rightBrace
+                                                 )
+            )
+            
+            return [
+                SyntaxFactory.makeMemberDeclListItem(
+                    decl: DeclSyntax(testFunctionDeclaration),
+                    semicolon: nil
+                )
+            ]
+        default:
+            print("TODO handle spec()-level `\(calledFunctionName)`")
+            return []
+        }
     }
     
 }
@@ -193,5 +243,5 @@ try swiftFiles.forEach { fileName in
     let sourceFile = try SyntaxParser.parse(url)
     let transformed = TransformQuickSpec().visit(sourceFile)
     
-//    try String(describing: transformed).write(to: url, atomically: true, encoding: .utf8)
+    try String(describing: transformed).write(to: url, atomically: true, encoding: .utf8)
 }
