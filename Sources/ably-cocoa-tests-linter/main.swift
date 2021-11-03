@@ -78,6 +78,8 @@ class TransformQuickSpecMethods: SyntaxRewriter {
         
         // Then what do we do with the describe / it?
         
+        // There's a bunch of other stuff we'll have to handle: contexts defined in a loop inside another context, variables inside contexts.
+        
         guard let specFunctionBody = specFunctionDeclaration.body else {
             fatalError("Don’t know how to handle function declaration without a body")
         }
@@ -126,7 +128,7 @@ class TransformQuickSpecMethods: SyntaxRewriter {
         
         switch (calledFunctionName) {
         case "it":
-            print("handle it")
+            // `it` gets turned into a method
             
             precondition(functionCallExpr.argumentList.count == 1, "`it` should only take one argument")
             
@@ -161,9 +163,9 @@ class TransformQuickSpecMethods: SyntaxRewriter {
                 genericParameterClause: nil,
                 signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
                 genericWhereClause: nil,
-                body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace, statements: trailingClosure.statements, rightBrace: trailingClosure.rightBrace
+                body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace.withLeadingTrivia(.spaces(1)), statements: trailingClosure.statements, rightBrace: trailingClosure.rightBrace
                                                  )
-            )
+            ).withLeadingTrivia(functionCallExpr.leadingTrivia!).withTrailingTrivia(functionCallExpr.trailingTrivia!)
             
             return [
                 SyntaxFactory.makeMemberDeclListItem(
