@@ -135,7 +135,8 @@ class TransformQuickSpecSubclass {
     
     private func transformFunctionCallInsideItContainerIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry) -> [MemberDeclListItemSyntax] {
         guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
-            preconditionFailure("Expected an identifier")
+            print("Expected an identifier, but got \(functionCallExpr)")
+            return []
         }
         
         // Not exactly sure what .text is but it seems to not have whitespace / comments etc
@@ -197,7 +198,7 @@ class TransformQuickSpecSubclass {
         }
         
         guard trailingClosure.signature == nil else {
-            preconditionFailure("I don't expect the trailing closure to have any signature")
+            preconditionFailure("I don't expect the trailing closure to have any signature, but got \(trailingClosure)")
         }
         
         let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
@@ -225,7 +226,7 @@ class TransformQuickSpecSubclass {
         let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "")
         let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces).joined(separator: "_")
         
-        // TODO iterate on this, probably want some camelCase instead of underscores
+        // TODO iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
         
         return withoutWhitespace
     }
