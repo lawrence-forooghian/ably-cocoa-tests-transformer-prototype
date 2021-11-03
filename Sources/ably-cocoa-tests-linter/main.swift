@@ -5,12 +5,41 @@ import Foundation
 // https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
 // what should we do with the xit test cases?
 
-// Transforms the `spec` method of a QuickSpec subclass.
-class TransformQuickSpecMethods: SyntaxRewriter {
-    private let containingClassName: String
+class TransformQuickSpecSubclass {
+    private let classDeclaration: ClassDeclSyntax
     
-    init(containingClassName: String) {
-        self.containingClassName = containingClassName
+    init(classDeclaration: ClassDeclSyntax) {
+        self.classDeclaration = classDeclaration
+    }
+    
+    var containingClassName: String {
+        get {
+            classDeclaration.identifier.text
+        }
+    }
+    
+    func transformed() -> ClassDeclSyntax {
+        var result = classDeclaration
+        
+        // This all feels a bit clumsy, probably doing something very wrong
+        
+        let originalMembersBlock = classDeclaration.members
+        let newDeclListItems = originalMembersBlock.members.flatMap { member in
+            return transformClassMember(member)
+        }
+        
+        let newMembersBlock = MemberDeclBlockSyntax { builder in
+            builder.useLeftBrace(originalMembersBlock.leftBrace)
+            builder.useRightBrace(originalMembersBlock.rightBrace)
+            
+            newDeclListItems.forEach { item in
+                builder.addMember(item)
+            }
+        }
+        
+        result.members = newMembersBlock
+        
+        return result
     }
     
     private func isAuditedForPassthrough(_ node: FunctionDeclSyntax) -> Bool {
@@ -19,58 +48,25 @@ class TransformQuickSpecMethods: SyntaxRewriter {
         return allowList.contains([containingClassName, node.identifier.text])
     }
     
-    // TODO get rid of this and directly modify the class's members instead of spitting out a struct
-    override func visitAny(_ node: Syntax) -> Syntax? {
-        // I'm trying to figure out how to return something other than a DeclSyntax from a visit(FunctionDeclSyntax), I think it's using this visitAny
-                
-        guard let functionDecl = FunctionDeclSyntax(node) else {
-            return nil // I think this means "do your usual thing, I won't give you anything different here"
+    private func transformClassMember(_ member: MemberDeclListItemSyntax) -> [MemberDeclListItemSyntax] {
+
+        guard let functionDecl = member.decl.as(FunctionDeclSyntax.self) else {
+            // TODO we need to figure out what else might be here
+            return [member]
         }
         
-        return visit(functionDecl)
-    }
-    
-    private func visit(_ node: FunctionDeclSyntax) -> Syntax {
-        switch (node.identifier.text) {
+        switch (functionDecl.identifier.text) {
         case "setUp", "tearDown":
             print("TODO handle class-level `setUp` and `tearDown`")
-            return Syntax(node)
+            return [member]
         case "spec":
-            let classLevelDeclarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(node)
-            return embedDeclarationsInStruct(classLevelDeclarations)
+            return transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDecl)
         default:
-            if (isAuditedForPassthrough(node)) {
-                return Syntax(node)
+            if (isAuditedForPassthrough(functionDecl)) {
+                return [member]
             }
-            fatalError("Don't know how to handle class-level function \(node.identifier) in \(containingClassName)")
+            fatalError("Don't know how to handle class-level function \(functionDecl.identifier) in \(containingClassName)")
         }
-    }
-    
-    private func embedDeclarationsInStruct(_ declarations: [MemberDeclListItemSyntax]) -> Syntax {
-        // So, what we've learned here is that you can grab all of the variable declarations from inside the spec() function, and spit them out as the memebr variables of a new struct. But that for whatever reason it's not easy (/ possible?) So what we'll do is return a list of items and then add those into the member list of the class (and if that doesn't work then we'll just create a new class).
-        
-        let structKeyword = SyntaxFactory.makeStructKeyword(trailingTrivia: .spaces(1))
-
-        let identifier = SyntaxFactory.makeIdentifier("PlaceholderTODORemoveAndPutInsideClass", trailingTrivia: .spaces(1))
-
-        let leftBrace = SyntaxFactory.makeLeftBraceToken()
-        let rightBrace = SyntaxFactory.makeRightBraceToken(leadingTrivia: .newlines(1))
-        let members = MemberDeclBlockSyntax { builder in
-            builder.useLeftBrace(leftBrace)
-            builder.useRightBrace(rightBrace)
-            
-            declarations.forEach { item in
-                builder.addMember(item)
-            }
-        }
-
-        let structureDeclaration = StructDeclSyntax { builder in
-            builder.useStructKeyword(structKeyword)
-            builder.useIdentifier(identifier)
-            builder.useMembers(members)
-        }
-        
-        return Syntax(structureDeclaration)
     }
         
     private func transformSpecFunctionDeclarationIntoClassLevelDeclarations(_ specFunctionDeclaration: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
@@ -230,7 +226,9 @@ class TransformQuickSpec: SyntaxRewriter {
         let newInheritanceClause = inheritanceClause.withInheritedTypeCollection(newInheritedTypes)
         let newNode = node.withInheritanceClause(newInheritanceClause)
         
-        return TransformQuickSpecMethods(containingClassName: node.identifier.text).visit(newNode)
+        let newClassDeclaration = TransformQuickSpecSubclass(classDeclaration: newNode).transformed()
+        
+        return DeclSyntax(newClassDeclaration)
     }
 }
 
