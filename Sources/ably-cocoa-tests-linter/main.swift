@@ -6,6 +6,26 @@ import Foundation
 // what should we do with the xit test cases?
 
 class TransformQuickSpecSubclass {
+    enum ItAncestor: CustomStringConvertible {
+        case spec
+        case describeOrContext(description: String)
+        
+        var description: String {
+            switch (self) {
+            case .spec: return "spec()"
+            case let .describeOrContext(description: description): return "describeOrContext(\(description))"
+            }
+        }
+        
+        var methodNameComponent: String {
+            switch (self) {
+            case .spec: return ""
+            case let .describeOrContext(description: description): return description
+            }
+        }
+    }
+    typealias ItAncestry = [ItAncestor]
+    
     private let classDeclaration: ClassDeclSyntax
     
     init(classDeclaration: ClassDeclSyntax) {
@@ -49,7 +69,6 @@ class TransformQuickSpecSubclass {
     }
     
     private func transformClassMember(_ member: MemberDeclListItemSyntax) -> [MemberDeclListItemSyntax] {
-        
         guard let functionDecl = member.decl.as(FunctionDeclSyntax.self) else {
             // TODO we need to figure out what else might be here
             print("passing through unhandled \(member)")
@@ -73,27 +92,30 @@ class TransformQuickSpecSubclass {
     private func transformSpecFunctionDeclarationIntoClassLevelDeclarations(_ specFunctionDeclaration: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
         // I think we want to lift the whole body of spec() and pull it out to the class body, keeping the variable declarations etc (see e.g. RestClient's spec)
         
-        // Then what do we do with the describe / it?
-        
-        // There's a bunch of other stuff we'll have to handle: contexts defined in a loop inside another context, variables inside contexts.
-        
         guard let specFunctionBody = specFunctionDeclaration.body else {
             fatalError("Don’t know how to handle function declaration without a body")
         }
         
-        let memberDeclListItems = specFunctionBody.statements.compactMap { statement -> [MemberDeclListItemSyntax]? in
+        return transformItContainerBodyIntoClassLevelDeclarations(specFunctionBody.statements, ancestry: [.spec])
+    }
+    
+    private func transformItContainerBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, ancestry: ItAncestry) -> [MemberDeclListItemSyntax] {
+        // TODO remove references to spec() here, and check they still apply
+        
+        let memberDeclListItems = statements.compactMap { statement -> [MemberDeclListItemSyntax]? in
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
             
             // TODO what if there's stuff that clashes?
             
             if let variableDeclaration = VariableDeclSyntax(statement.item) {
                 // Variable declarations just get hoisted outside of spec()
+                // TODO revisit this now that it's not just spec — these need tidying up, probably grouping into some sort of object instead of just dumping everything at the top level
                 
                 let decl = DeclSyntax(variableDeclaration)
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
-                return transformFunctionCallInsideSpecIntoClassLevelDeclarations(functionCallExpr)
+                return transformFunctionCallInsideItContainerIntoClassLevelDeclarations(functionCallExpr, ancestry: ancestry)
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
                 // Struct declarations just get hoisted outside of spec()
@@ -102,20 +124,16 @@ class TransformQuickSpecSubclass {
                 let decl = DeclSyntax(structDeclaration)
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
-            else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
-                // This is just a couple, search rsh3a2(), rsh3a2a(). Might
-                // be simplest just to refactor this by hand first
-                print("TODO handle spec()-level function declaration `\(functionDeclaration.identifier)`")
+            else {
+                print("TODO handle \(ancestry)-level \(statement.item)")
                 return nil
-            } else {
-                preconditionFailure("I don't know how to handle this thing")
             }
         }.flatMap { $0 }
         
         return memberDeclListItems
     }
     
-    private func transformFunctionCallInsideSpecIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax) -> [MemberDeclListItemSyntax] {
+    private func transformFunctionCallInsideItContainerIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry) -> [MemberDeclListItemSyntax] {
         guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
             preconditionFailure("Expected an identifier")
         }
@@ -125,16 +143,25 @@ class TransformQuickSpecSubclass {
         
         switch (calledFunctionName) {
         case "it":
-            return [transformItFunctionCallInsideSpecIntoClassLevelDeclaration(functionCallExpr)]
+            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, ancestry: ancestry)]
+        case "describe", "context":
+            guard let trailingClosure = functionCallExpr.trailingClosure else {
+                // TODO DRY up with `it`
+                preconditionFailure("Expected a trailing closure")
+            }
             
+            let description = getFunctionArgument(functionCallExpr)
+            
+            return transformItContainerBodyIntoClassLevelDeclarations(trailingClosure.statements, ancestry: ancestry + [.describeOrContext(description: description)])
         default:
-            print("TODO handle spec()-level `\(calledFunctionName)`")
+            print("TODO handle \(ancestry)-level `\(calledFunctionName)`")
             return []
         }
     }
     
-    private func transformItFunctionCallInsideSpecIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax) -> MemberDeclListItemSyntax {
-        // `it` gets turned into a method
+    // gets the argument for `it` / `describe` / `context` etc
+    private func getFunctionArgument(_ functionCallExpr: FunctionCallExprSyntax) -> String {
+        // TODO update function name from `it` here
         
         precondition(functionCallExpr.argumentList.count == 1, "`it` should only take one argument")
         
@@ -151,6 +178,18 @@ class TransformQuickSpecSubclass {
         // TODO is this okay? Wasn't sure how to keep drilling
         let testDescription = firstSegment.firstToken!.text
         
+        return testDescription
+    }
+
+    private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry) -> MemberDeclListItemSyntax {
+        // TODO do something with the ancestry
+        
+        // `it` gets turned into a method
+        
+        let testDescription = getFunctionArgument(functionCallExpr)
+        
+        let methodName = methodName(testDescription: testDescription, ancestry: ancestry)
+        
         // Now we grab the trailing closure from the call to `it` and use that as the new test method's body
         
         guard let trailingClosure = functionCallExpr.trailingClosure else {
@@ -165,7 +204,7 @@ class TransformQuickSpecSubclass {
             attributes: nil,
             modifiers: nil,
             funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
-            identifier: SyntaxFactory.makeIdentifier(testDescription) /* TODO this needs sanitizing */,
+            identifier: SyntaxFactory.makeIdentifier(methodName),
             genericParameterClause: nil,
             signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
             genericWhereClause: nil,
@@ -177,6 +216,18 @@ class TransformQuickSpecSubclass {
             decl: DeclSyntax(testFunctionDeclaration),
             semicolon: nil
         )
+    }
+    
+    private func methodName(testDescription: String, ancestry: ItAncestry) -> String {
+        let unsanitisedComponents = ancestry.map { $0.methodNameComponent } + [testDescription]
+        let unsantisedName = unsanitisedComponents[0].starts(with: "test") ? "" : "test" + unsanitisedComponents.joined(separator: "_")
+        
+        let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "")
+        let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces).joined(separator: "_")
+        
+        // TODO iterate on this, probably want some camelCase instead of underscores
+        
+        return withoutWhitespace
     }
 }
 
