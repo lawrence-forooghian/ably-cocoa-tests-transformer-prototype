@@ -70,8 +70,8 @@ class TransformQuickSpecSubclass {
     private func transformClassMember(_ member: MemberDeclListItemSyntax) -> [MemberDeclListItemSyntax] {
         guard let functionDecl = member.decl.as(FunctionDeclSyntax.self) else {
             // TODO we need to figure out what else might be here
-            print("passing through unhandled \(member)")
-            return [member]
+            print("TODO handle class-level \(member)")
+            return []
         }
         
         switch (functionDecl.identifier.text) {
