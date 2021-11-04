@@ -3,7 +3,6 @@ import Foundation
 
 // TODO what about stuff like comments – do they come through?
 // https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
-// what should we do with the xit test cases?
 
 class TransformQuickSpecSubclass {
     enum ItAncestor: CustomStringConvertible {
@@ -144,7 +143,9 @@ class TransformQuickSpecSubclass {
         
         switch (calledFunctionName) {
         case "it":
-            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, ancestry: ancestry)]
+            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, ancestry: ancestry, skipped: false)]
+        case "xit":
+            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, ancestry: ancestry, skipped: true)]
         case "describe", "context":
             guard let trailingClosure = functionCallExpr.trailingClosure else {
                 // TODO DRY up with `it`
@@ -182,14 +183,14 @@ class TransformQuickSpecSubclass {
         return testDescription
     }
 
-    private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry) -> MemberDeclListItemSyntax {
+    private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry, skipped: Bool) -> MemberDeclListItemSyntax {
         // TODO do something with the ancestry
         
         // `it` gets turned into a method
         
         let testDescription = getFunctionArgument(functionCallExpr)
         
-        let methodName = methodName(testDescription: testDescription, ancestry: ancestry)
+        let methodName = methodName(testDescription: testDescription, ancestry: ancestry, skipped: skipped)
         
         // Now we grab the trailing closure from the call to `it` and use that as the new test method's body
         
@@ -219,7 +220,7 @@ class TransformQuickSpecSubclass {
         )
     }
     
-    private func methodName(testDescription: String, ancestry: ItAncestry) -> String {
+    private func methodName(testDescription: String, ancestry: ItAncestry, skipped: Bool) -> String {
         let unsanitisedComponents = ancestry.map { $0.methodNameComponent } + [testDescription]
         let unsantisedName = unsanitisedComponents[0].starts(with: "test") ? "" : "test" + unsanitisedComponents.joined(separator: "_")
         
@@ -228,7 +229,7 @@ class TransformQuickSpecSubclass {
         
         // TODO iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
         
-        return withoutWhitespace
+        return (skipped ? "skipped_" : "") + withoutWhitespace
     }
 }
 
