@@ -123,6 +123,56 @@ class TransformQuickSpecSubclass {
                 let decl = DeclSyntax(structDeclaration)
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
+            else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
+                if (["rsh3a2a", "rsh3d2"].contains(functionDeclaration.identifier.text)) {
+                    // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
+                    // but we preserve the containing function and make it also invoke all of the test cases
+                    
+                    let declarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDeclaration)
+                    print("special case gave \(declarations)")
+                    
+                    // OK, we need to embed this inside a class
+                    // wait, no, we'll keep it as a function call
+                    
+                    var newFunctionDeclaration = functionDeclaration
+                    
+                    // TODO this is also probably hacky - we're taking a bunch of class member items and turning them back into just declarations. Not necessary
+                    let codeBlockItemsFromFunction = declarations.map { declaration in
+                        SyntaxFactory.makeCodeBlockItem(item: Syntax(declaration.decl), semicolon: nil, errorTokens: nil)
+                    }
+                    
+                    // TODO this is a bit hacky – we're essentially figuring out which
+                    // test methods were created by transformSpecFunctionDeclarationIntoClassLevelDeclarations
+                    // but we could probably just improve things to make it tell us that
+                    let testFunctionDeclarations = declarations.compactMap { declaration -> FunctionDeclSyntax? in
+                        guard let functionDeclaration = declaration.decl.as(FunctionDeclSyntax.self) else {
+                            return nil
+                        }
+                        if (!functionDeclaration.identifier.text.starts(with: "test")) {
+                            // TODO should we handle skipped functions in some nicer way?
+                            return nil
+                        }
+                        return functionDeclaration
+                    }
+                    
+                    // We now invoke all of these functions.
+                    let testFunctionInvocationCodeBlockItems = testFunctionDeclarations.map { declaration -> CodeBlockItemSyntax in
+                        let testFunctionInvocationExpression = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: declaration.identifier, declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                        
+                        return SyntaxFactory.makeCodeBlockItem(item: Syntax(testFunctionInvocationExpression), semicolon: nil, errorTokens: nil)
+                    }
+                    
+                    // TODO should we stick some logging into these test functions or something?
+                    
+                    newFunctionDeclaration.body!.statements = SyntaxFactory.makeCodeBlockItemList(codeBlockItemsFromFunction + testFunctionInvocationCodeBlockItems)
+                    
+                    return [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }]
+                }
+                
+                print("TODO handle declaration of function \(functionDeclaration.identifier)")
+                return []
+                
+            }
             else {
                 print("TODO handle \(ancestry)-level \(statement.item)")
                 return nil
