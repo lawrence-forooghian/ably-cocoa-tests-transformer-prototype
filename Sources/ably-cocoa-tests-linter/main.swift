@@ -124,7 +124,9 @@ class TransformQuickSpecSubclass {
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
             else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
-                if (["rsh3a2a", "rsh3d2"].contains(functionDeclaration.identifier.text)) {
+                // TODO The alternative here would probably be, instead of allow-listing everything,
+                // to treat any function that contains calls to `context` etc as an instance of this case
+                if (["rsh3a2a", "rsh3d2", "testFixture"].contains(functionDeclaration.identifier.text)) {
                     // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
                     // but we preserve the containing function and make it also invoke all of the test cases
                     
