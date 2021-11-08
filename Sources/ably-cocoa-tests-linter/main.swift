@@ -132,7 +132,6 @@ class TransformQuickSpecSubclass {
                     // but we preserve the containing function and make it also invoke all of the test cases
                     
                     let declarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDeclaration)
-                    print("special case gave \(declarations)")
                     
                     // OK, we need to embed this inside a class
                     // wait, no, we'll keep it as a function call
