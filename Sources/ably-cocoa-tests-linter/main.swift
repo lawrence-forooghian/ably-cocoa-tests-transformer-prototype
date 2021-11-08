@@ -126,7 +126,8 @@ class TransformQuickSpecSubclass {
             else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
                 // TODO The alternative here would probably be, instead of allow-listing everything,
                 // to treat any function that contains calls to `context` etc as an instance of this case
-                if (["rsh3a2a", "rsh3d2", "testFixture"].contains(functionDeclaration.identifier.text)) {
+                // TODO let's emit a warning when thsi returns no test cases? probably means we unrolled a loop incorrectly
+                if (["rsh3a2a", "rsh3d2", "testFixture", "testAttribute", "testDirection", "testRequestType"].contains(functionDeclaration.identifier.text)) {
                     // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
                     // but we preserve the containing function and make it also invoke all of the test cases
                     
@@ -171,9 +172,11 @@ class TransformQuickSpecSubclass {
                     return [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }]
                 }
                 
-                if (["testWithUntilAttach"].contains(functionDeclaration.identifier.text)) {
+                if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture"].contains(functionDeclaration.identifier.text)) {
                     // This is a test function that directly contains assertions, we just pass it through
-                    // TODO is there a neater way to do this?
+                    // TODO is there a neater way to do this? e.g. a special return type / method name
+                    // TODO should we also namespace these, e.g. 'testHandlesDecodingErrorInFixture' in RealtimeClientChannel, which is inside a context?
+                    // TODO does the XCTest framework know what to do with these?
                     return [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }]
                 }
                 
