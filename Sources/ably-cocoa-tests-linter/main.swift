@@ -90,10 +90,10 @@ class TransformQuickSpecSubclass {
             fatalError("Don’t know how to handle function declaration without a body")
         }
         
-        return transformItContainerBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, hasOwnBeforeEach: false, hasOwnAfterEach: false)])
+        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, hasOwnBeforeEach: false, hasOwnAfterEach: false)])
     }
     
-    private func transformItContainerBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
+    private func transformScopeMemberBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
         // TODO remove references to spec() here, and check they still apply
         
         let memberDeclListItems = statements.compactMap { statement -> [MemberDeclListItemSyntax]? in
@@ -109,7 +109,7 @@ class TransformQuickSpecSubclass {
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
-                return transformFunctionCallInsideItContainerIntoClassLevelDeclarations(functionCallExpr, scope: scope)
+                return transformFunctionCallInsideScopeIntoClassLevelDeclarations(functionCallExpr, scope: scope)
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
                 // Struct declarations just get hoisted outside of spec()
@@ -189,7 +189,7 @@ class TransformQuickSpecSubclass {
         return memberDeclListItems
     }
     
-    private func transformFunctionCallInsideItContainerIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
+    private func transformFunctionCallInsideScopeIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
         guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
             print("Expected an identifier, but got \(functionCallExpr)")
             return []
@@ -211,7 +211,7 @@ class TransformQuickSpecSubclass {
             
             let description = getFunctionArgument(functionCallExpr)
             
-            return transformItContainerBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), hasOwnBeforeEach: false, hasOwnAfterEach: false)])
+            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), hasOwnBeforeEach: false, hasOwnAfterEach: false)])
         default:
             print("\tTODO handle \(scope)-level `\(calledFunctionName)`")
             return []
