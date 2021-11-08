@@ -171,7 +171,7 @@ class TransformQuickSpecSubclass {
                     return [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }]
                 }
                 
-                if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture"].contains(functionDeclaration.identifier.text)) {
+                if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture", "testFakeNetworkResponse"].contains(functionDeclaration.identifier.text)) {
                     // This is a test function that directly contains assertions, we just pass it through
                     // TODO is there a neater way to do this? e.g. a special return type / method name
                     // TODO should we also namespace these, e.g. 'testHandlesDecodingErrorInFixture' in RealtimeClientChannel, which is inside a context?
