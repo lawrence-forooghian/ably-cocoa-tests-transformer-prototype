@@ -5,25 +5,36 @@ import Foundation
 // https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
 
 class TransformQuickSpecSubclass {
-    enum ItAncestor: CustomStringConvertible {
-        case spec
-        case describeOrContext(description: String)
-        
-        var description: String {
-            switch (self) {
-            case .spec: return "spec()"
-            case let .describeOrContext(description: description): return "describeOrContext(\(description))"
+    struct ScopeMember: CustomStringConvertible {
+        enum ScopeMemberType: CustomStringConvertible {
+            case spec
+            case describeOrContext(description: String)
+            
+            var description: String {
+                switch (self) {
+                case .spec: return "spec()"
+                case let .describeOrContext(description: description): return "describeOrContext(\(description))"
+                }
             }
+
         }
         
+        var type: ScopeMemberType
+        var hasOwnBeforeEach: Bool
+        var hasOwnAfterEach: Bool
+        
         var methodNameComponent: String {
-            switch (self) {
+            switch (type) {
             case .spec: return ""
             case let .describeOrContext(description: description): return description
             }
         }
+        
+        var description: String {
+            return "<\(String(describing: type))" + (hasOwnBeforeEach ? ", hasOwnBeforeEach" : "") + (hasOwnAfterEach ? ", hasOwnAfterEach" : "") + ">"
+        }
     }
-    typealias ItAncestry = [ItAncestor]
+    typealias Scope = [ScopeMember]
     
     private let classDeclaration: ClassDeclSyntax
     
@@ -79,10 +90,10 @@ class TransformQuickSpecSubclass {
             fatalError("Don’t know how to handle function declaration without a body")
         }
         
-        return transformItContainerBodyIntoClassLevelDeclarations(specFunctionBody.statements, ancestry: [.spec])
+        return transformItContainerBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, hasOwnBeforeEach: false, hasOwnAfterEach: false)])
     }
     
-    private func transformItContainerBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, ancestry: ItAncestry) -> [MemberDeclListItemSyntax] {
+    private func transformItContainerBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
         // TODO remove references to spec() here, and check they still apply
         
         let memberDeclListItems = statements.compactMap { statement -> [MemberDeclListItemSyntax]? in
@@ -98,7 +109,7 @@ class TransformQuickSpecSubclass {
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
-                return transformFunctionCallInsideItContainerIntoClassLevelDeclarations(functionCallExpr, ancestry: ancestry)
+                return transformFunctionCallInsideItContainerIntoClassLevelDeclarations(functionCallExpr, scope: scope)
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
                 // Struct declarations just get hoisted outside of spec()
@@ -161,15 +172,16 @@ class TransformQuickSpecSubclass {
                     // TODO should we also namespace these, e.g. 'testHandlesDecodingErrorInFixture' in RealtimeClientChannel, which is inside a context?
                     // TODO does the XCTest framework know what to do with these?
                     // TODO what if any of these use some context-local variables and we just shove them at the top level; is that maybe a problem? Maybe we need an object to contain everything, might be easiest
+                    // TODO we can make this simpler once we start introducing scope objects – then these become methods on the scope or something and we pass em through. Except for anything containing it / context / describe — those get treated like a `spec`.
                     return [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }]
                 }
                 
-                print("\tTODO handle \(ancestry)-level declaration of function `\(functionDeclaration.identifier)`")
+                print("\tTODO handle \(scope)-level declaration of function `\(functionDeclaration.identifier)`")
                 return []
                 
             }
             else {
-                print("\tTODO handle \(ancestry)-level \(statement.item)")
+                print("\tTODO handle \(scope)-level \(statement.item)")
                 return nil
             }
         }.flatMap { $0 }
@@ -177,7 +189,7 @@ class TransformQuickSpecSubclass {
         return memberDeclListItems
     }
     
-    private func transformFunctionCallInsideItContainerIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry) -> [MemberDeclListItemSyntax] {
+    private func transformFunctionCallInsideItContainerIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
         guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
             print("Expected an identifier, but got \(functionCallExpr)")
             return []
@@ -188,9 +200,9 @@ class TransformQuickSpecSubclass {
         
         switch (calledFunctionName) {
         case "it":
-            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, ancestry: ancestry, skipped: false)]
+            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: false)]
         case "xit":
-            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, ancestry: ancestry, skipped: true)]
+            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: true)]
         case "describe", "context":
             guard let trailingClosure = functionCallExpr.trailingClosure else {
                 // TODO DRY up with `it`
@@ -199,9 +211,9 @@ class TransformQuickSpecSubclass {
             
             let description = getFunctionArgument(functionCallExpr)
             
-            return transformItContainerBodyIntoClassLevelDeclarations(trailingClosure.statements, ancestry: ancestry + [.describeOrContext(description: description)])
+            return transformItContainerBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), hasOwnBeforeEach: false, hasOwnAfterEach: false)])
         default:
-            print("\tTODO handle \(ancestry)-level `\(calledFunctionName)`")
+            print("\tTODO handle \(scope)-level `\(calledFunctionName)`")
             return []
         }
     }
@@ -228,14 +240,14 @@ class TransformQuickSpecSubclass {
         return testDescription
     }
 
-    private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, ancestry: ItAncestry, skipped: Bool) -> MemberDeclListItemSyntax {
-        // TODO do something with the ancestry
+    private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope, skipped: Bool) -> MemberDeclListItemSyntax {
+        // TODO do something with the scope
         
         // `it` gets turned into a method
         
         let testDescription = getFunctionArgument(functionCallExpr)
         
-        let methodName = methodName(testDescription: testDescription, ancestry: ancestry, skipped: skipped)
+        let methodName = methodName(testDescription: testDescription, scope: scope, skipped: skipped)
         
         // Now we grab the trailing closure from the call to `it` and use that as the new test method's body
         
@@ -265,8 +277,8 @@ class TransformQuickSpecSubclass {
         )
     }
     
-    private func methodName(testDescription: String, ancestry: ItAncestry, skipped: Bool) -> String {
-        let unsanitisedComponents = ancestry.map { $0.methodNameComponent } + [testDescription]
+    private func methodName(testDescription: String, scope: Scope, skipped: Bool) -> String {
+        let unsanitisedComponents = scope.map { $0.methodNameComponent } + [testDescription]
         let unsantisedName = unsanitisedComponents[0].starts(with: "test") ? "" : "test" + unsanitisedComponents.joined(separator: "_")
         
         let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "")
