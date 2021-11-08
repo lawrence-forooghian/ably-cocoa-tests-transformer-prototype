@@ -61,31 +61,15 @@ class TransformQuickSpecSubclass {
         return result
     }
     
-    private func isAuditedForPassthrough(_ node: FunctionDeclSyntax) -> Bool {
-        let allowList = [["RealtimeClient", "checkError"]]
-        
-        return allowList.contains([containingClassName, node.identifier.text])
-    }
-    
     private func transformClassMember(_ member: MemberDeclListItemSyntax) -> [MemberDeclListItemSyntax] {
-        guard let functionDecl = member.decl.as(FunctionDeclSyntax.self) else {
-            // TODO we need to figure out what else might be here
-            print("TODO handle class-level \(member)")
-            return []
+        // I think the only class-level thing we want to manipulate is the `spec` function – everything else
+        // we can pass through
+        
+        guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self), specFunctionDecl.identifier.text == "spec" else {
+            return [member]
         }
         
-        switch (functionDecl.identifier.text) {
-        case "setUp", "tearDown":
-            print("TODO handle class-level `setUp` and `tearDown`")
-            return [member]
-        case "spec":
-            return transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDecl)
-        default:
-            if (isAuditedForPassthrough(functionDecl)) {
-                return [member]
-            }
-            fatalError("Don't know how to handle class-level function \(functionDecl.identifier) in \(containingClassName)")
-        }
+        return transformSpecFunctionDeclarationIntoClassLevelDeclarations(specFunctionDecl)
     }
     
     private func transformSpecFunctionDeclarationIntoClassLevelDeclarations(_ specFunctionDeclaration: FunctionDeclSyntax) -> [MemberDeclListItemSyntax] {
@@ -179,7 +163,7 @@ class TransformQuickSpecSubclass {
                     return [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }]
                 }
                 
-                print("TODO handle declaration of function \(functionDeclaration.identifier)")
+                print("TODO handle \(ancestry)-level declaration of function `\(functionDeclaration.identifier)`")
                 return []
                 
             }
