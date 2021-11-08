@@ -164,12 +164,12 @@ class TransformQuickSpecSubclass {
                     return [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }]
                 }
                 
-                print("TODO handle \(ancestry)-level declaration of function `\(functionDeclaration.identifier)`")
+                print("\tTODO handle \(ancestry)-level declaration of function `\(functionDeclaration.identifier)`")
                 return []
                 
             }
             else {
-                print("TODO handle \(ancestry)-level \(statement.item)")
+                print("\tTODO handle \(ancestry)-level \(statement.item)")
                 return nil
             }
         }.flatMap { $0 }
@@ -201,7 +201,7 @@ class TransformQuickSpecSubclass {
             
             return transformItContainerBodyIntoClassLevelDeclarations(trailingClosure.statements, ancestry: ancestry + [.describeOrContext(description: description)])
         default:
-            print("TODO handle \(ancestry)-level `\(calledFunctionName)`")
+            print("\tTODO handle \(ancestry)-level `\(calledFunctionName)`")
             return []
         }
     }
