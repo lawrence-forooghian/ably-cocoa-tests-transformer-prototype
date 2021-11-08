@@ -281,7 +281,7 @@ class TransformQuickSpecSubclass {
         let unsanitisedComponents = scope.map { $0.methodNameComponent } + [testDescription]
         let unsantisedName = unsanitisedComponents[0].starts(with: "test") ? "" : "test" + unsanitisedComponents.joined(separator: "_")
         
-        let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "")
+        let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "_")
         let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces).joined(separator: "_")
         
         // TODO iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
