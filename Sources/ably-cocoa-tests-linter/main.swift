@@ -155,11 +155,12 @@ class TransformQuickSpecSubclass {
                     return [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }]
                 }
                 
-                if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture", "testFakeNetworkResponse", "testSupportsAESEncryptionWithKeyLength", "testOptionsGiveDefaultAuthMethod", "testOptionsGiveBasicAuthFalse", "testRestoresDefaultPrimaryHostAfterTimeoutExpires", "testStoresSuccessfulFallbackHostAsDefaultHost", "testUsesAlternativeHost", "testUsesAnotherFallbackHost", "testMovesToDisconnectedWithNetworkingError", "testStopsClientWithOptions"].contains(functionDeclaration.identifier.text)) {
+                if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture", "testFakeNetworkResponse", "testSupportsAESEncryptionWithKeyLength", "testOptionsGiveDefaultAuthMethod", "testOptionsGiveBasicAuthFalse", "testRestoresDefaultPrimaryHostAfterTimeoutExpires", "testStoresSuccessfulFallbackHostAsDefaultHost", "testUsesAlternativeHost", "testUsesAnotherFallbackHost", "testMovesToDisconnectedWithNetworkingError", "testStopsClientWithOptions", "testSuspendedStateResultsInError"].contains(functionDeclaration.identifier.text)) {
                     // This is a test function that directly contains assertions, we just pass it through
                     // TODO is there a neater way to do this? e.g. a special return type / method name
                     // TODO should we also namespace these, e.g. 'testHandlesDecodingErrorInFixture' in RealtimeClientChannel, which is inside a context?
                     // TODO does the XCTest framework know what to do with these?
+                    // TODO what if any of these use some context-local variables and we just shove them at the top level; is that maybe a problem? Maybe we need an object to contain everything, might be easiest
                     return [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }]
                 }
                 
