@@ -171,6 +171,12 @@ class TransformQuickSpecSubclass {
                     return [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }]
                 }
                 
+                if (["testWithUntilAttach"].contains(functionDeclaration.identifier.text)) {
+                    // This is a test function that directly contains assertions, we just pass it through
+                    // TODO is there a neater way to do this?
+                    return [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }]
+                }
+                
                 print("TODO handle declaration of function \(functionDeclaration.identifier)")
                 return []
                 
