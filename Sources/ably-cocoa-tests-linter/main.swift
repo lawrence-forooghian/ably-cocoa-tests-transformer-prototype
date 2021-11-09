@@ -9,6 +9,28 @@ import Foundation
 
 // TODO tidy up this code and make it bloggable / talkable / open sourceable if we so desire
 
+// TODO I think we can make a Scope type so that we don't have to worry about things like array length (i.e. this invariant that scope is always non-empty)
+extension Array where Element == TransformQuickSpecSubclass.ScopeMember /* i.e. Scope */ {
+    private var parent: Self? {
+        guard self.count >= 2 else { return nil }
+        var new = self
+        new.removeLast()
+        return new
+    }
+    
+    var nearestAncestorHavingOwnBeforeEach: Self? {
+        guard let parent = self.parent else { return nil }
+        if (parent.last!.contentsInfo.hasOwnBeforeEach) { return parent }
+        return parent.nearestAncestorHavingOwnBeforeEach
+    }
+    
+    var nearestAncestorHavingOwnAfterEach: Self? {
+        guard let parent = self.parent else { return nil }
+        if (parent.last!.contentsInfo.hasOwnAfterEach) { return parent }
+        return parent.nearestAncestorHavingOwnAfterEach
+    }
+}
+
 class TransformQuickSpecSubclass {
     struct ScopeMember: CustomStringConvertible {
         enum ScopeMemberType: CustomStringConvertible {
@@ -99,7 +121,9 @@ class TransformQuickSpecSubclass {
             fatalError("Don’t know how to handle function declaration without a body")
         }
         
-        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, contentsInfo: ScopeMember.ContentsInfo(hasOwnBeforeEach: false, hasOwnAfterEach: false))])
+        let contentsInfo = createScopeMemberContentsInfo(specFunctionBody.statements)
+        
+        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, contentsInfo: contentsInfo)])
     }
     
     private func createScopeMemberContentsInfo(_ statements: CodeBlockItemListSyntax) -> ScopeMember.ContentsInfo {
@@ -309,7 +333,8 @@ class TransformQuickSpecSubclass {
     private func transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> MemberDeclListItemSyntax {
         // `beforeEach` or `afterEach` gets turned into a method
                 
-        let methodName = QuickSpecMethodCall(functionCallExpr: functionCallExpr).outputFunctionName(inScope: scope)
+        let methodCall = QuickSpecMethodCall(functionCallExpr: functionCallExpr)
+        let methodName = methodCall.outputFunctionName(inScope: scope)
         
         // Now we grab the trailing closure from the call to `before/afterEach` and use that as the new test method's body
         // TODO we can probably DRY this up with the `it` equivalent
@@ -321,9 +346,34 @@ class TransformQuickSpecSubclass {
         guard trailingClosure.signature == nil else {
             preconditionFailure("I don't expect the trailing closure to have any signature, but got \(trailingClosure)")
         }
+                
+        // Insert a call to the before/afterEach of the scope this one is nested within.
+        let newStatements: CodeBlockItemListSyntax = {
+            switch methodCall {
+                // TODO double-check the ordering of the before / after in relation to parents
+            case .beforeEach:
+                guard let nearest = scope.nearestAncestorHavingOwnBeforeEach else {
+                    return trailingClosure.statements
+                }
+                print("beforeEach nesting in \(scope)")
+                let ancestorFunctionName = QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: nearest)
+                let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(ancestorFunctionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                return trailingClosure.statements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(ancestorFunctionCall), semicolon: nil, errorTokens: nil))
+            case .afterEach:
+                guard let nearest = scope.nearestAncestorHavingOwnAfterEach else {
+                    return trailingClosure.statements
+                }
+                print("afterEach nesting in \(scope)")
+                let ancestorFunctionName = QuickSpecMethodCall.afterEach.outputFunctionName(inScope: nearest)
+                let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(ancestorFunctionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                return trailingClosure.statements.appending(SyntaxFactory.makeCodeBlockItem(item: Syntax(ancestorFunctionCall), semicolon: nil, errorTokens: nil))
+            default: fatalError("unexpected methodCall")
+            }
+        }()
         
-        print("TODO we need to call the before/afterEach for anything we're nested inside")
-        print("TODO we need to make sure the `it` methods call the before/afterEach")
+        print("TODO we need to call the before/afterEach for anything we're nested inside — something's going wrong somewhere because e.g. not all of the afterEach are being detected, see e.g. PushActivationStateMachine tests where we for sure have nesting, ah, no OK, that's because it an afterEach nested in the rsh3a2a function, hmm")
+        // we do actually have one example of a propertly nested beforeEach – see "State WaitingForDeregistration" in PushActivationStateMachine tests
+        print("TODO we need to make sure the `it` methods call the before/afterEach — and decide whether to do things using blocks or not")
         
         let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
             attributes: nil,
@@ -333,7 +383,7 @@ class TransformQuickSpecSubclass {
             genericParameterClause: nil,
             signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
             genericWhereClause: nil,
-            body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace.withLeadingTrivia(.spaces(1)), statements: trailingClosure.statements, rightBrace: trailingClosure.rightBrace
+            body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace.withLeadingTrivia(.spaces(1)), statements: newStatements, rightBrace: trailingClosure.rightBrace
                                              )
         ).withLeadingTrivia(functionCallExpr.leadingTrivia!).withTrailingTrivia(functionCallExpr.trailingTrivia!)
         
