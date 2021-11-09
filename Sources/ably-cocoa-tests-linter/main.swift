@@ -31,13 +31,20 @@ extension Array where Element == TransformQuickSpecSubclass.ScopeMember /* i.e. 
         }
         return parent?.nearestAncestorHavingOwnAfterEach(includeSelf: true)
     }
+    
+    var isSkipped: Bool {
+        if case .describeOrContext(description: _, skipped: true) = last!.type {
+            return true
+        }
+        return parent?.isSkipped ?? false
+    }
 }
 
 class TransformQuickSpecSubclass {
     struct ScopeMember: CustomStringConvertible {
         enum ScopeMemberType: CustomStringConvertible {
             case spec
-            case describeOrContext(description: String)
+            case describeOrContext(description: String, skipped: Bool)
             
             var description: String {
                 switch (self) {
@@ -59,7 +66,7 @@ class TransformQuickSpecSubclass {
         var methodNameComponent: String {
             switch (type) {
             case .spec: return ""
-            case let .describeOrContext(description: description): return description
+            case let .describeOrContext(description: description, skipped: _): return description
             }
         }
         
@@ -252,11 +259,9 @@ class TransformQuickSpecSubclass {
         let calledFunctionName = identifierExpression.identifier.text
         
         switch (calledFunctionName) {
-        case "it":
-            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: false)]
-        case "xit":
-            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: true)]
-        case "describe", "context":
+        case "it", "xit":
+            return [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: calledFunctionName == "xit")]
+        case "describe", "xdescribe", "context", "xcontext":
             guard let trailingClosure = functionCallExpr.trailingClosure else {
                 // TODO DRY up with `it`
                 preconditionFailure("Expected a trailing closure")
@@ -268,7 +273,9 @@ class TransformQuickSpecSubclass {
             // TODO why does this give fewer hasOwnBeforeEach than we have in the codebase? I'm sure we'll find out in time
             let contentsInfo = createScopeMemberContentsInfo(trailingClosure.statements)
             
-            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), contentsInfo: contentsInfo)])
+            let scopeMember = ScopeMember(type: .describeOrContext(description: description, skipped: calledFunctionName.starts(with: "x")), contentsInfo: contentsInfo)
+            
+            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [scopeMember])
         case "beforeEach", "afterEach":
             return [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)]
         default:
@@ -470,7 +477,7 @@ class TransformQuickSpecSubclass {
             
             // TODO iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
             
-            return (isSkipped ? "skipped_" : "") + withoutWhitespace
+            return (isSkipped || scope.isSkipped ? "skipped_" : "") + withoutWhitespace
         }
     }
 }
