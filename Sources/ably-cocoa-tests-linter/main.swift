@@ -241,6 +241,8 @@ class TransformQuickSpecSubclass {
             let contentsInfo = createScopeMemberContentsInfo(trailingClosure.statements)
             
             return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), contentsInfo: contentsInfo)])
+        case "beforeEach", "afterEach":
+            return [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)]
         default:
             print("\tTODO handle \(scope)-level `\(calledFunctionName)`")
             return []
@@ -270,13 +272,11 @@ class TransformQuickSpecSubclass {
     }
 
     private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope, skipped: Bool) -> MemberDeclListItemSyntax {
-        // TODO do something with the scope
-        
         // `it` gets turned into a method
         
         let testDescription = getFunctionArgument(functionCallExpr)
         
-        let methodName = methodName(testDescription: testDescription, scope: scope, skipped: skipped)
+        let methodName = QuickSpecMethodCall.it(testDescription: testDescription, skipped: skipped).outputFunctionName(inScope: scope)
         
         // Now we grab the trailing closure from the call to `it` and use that as the new test method's body
         
@@ -306,16 +306,99 @@ class TransformQuickSpecSubclass {
         )
     }
     
-    private func methodName(testDescription: String, scope: Scope, skipped: Bool) -> String {
-        let unsanitisedComponents = scope.map { $0.methodNameComponent } + [testDescription]
-        let unsantisedName = unsanitisedComponents[0].starts(with: "test") ? "" : "test" + unsanitisedComponents.joined(separator: "_")
+    private func transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> MemberDeclListItemSyntax {
+        // `beforeEach` or `afterEach` gets turned into a method
+                
+        let methodName = QuickSpecMethodCall(functionCallExpr: functionCallExpr).outputFunctionName(inScope: scope)
         
-        let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "_")
-        let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces).joined(separator: "_")
+        // Now we grab the trailing closure from the call to `before/afterEach` and use that as the new test method's body
+        // TODO we can probably DRY this up with the `it` equivalent
         
-        // TODO iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
+        guard let trailingClosure = functionCallExpr.trailingClosure else {
+            preconditionFailure("I expect a call to `before/afterEach` to have a trailing closure")
+        }
         
-        return (skipped ? "skipped_" : "") + withoutWhitespace
+        guard trailingClosure.signature == nil else {
+            preconditionFailure("I don't expect the trailing closure to have any signature, but got \(trailingClosure)")
+        }
+        
+        print("TODO we need to call the before/afterEach for anything we're nested inside")
+        print("TODO we need to make sure the `it` methods call the before/afterEach")
+        
+        let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
+            attributes: nil,
+            modifiers: nil,
+            funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
+            identifier: SyntaxFactory.makeIdentifier(methodName),
+            genericParameterClause: nil,
+            signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
+            genericWhereClause: nil,
+            body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace.withLeadingTrivia(.spaces(1)), statements: trailingClosure.statements, rightBrace: trailingClosure.rightBrace
+                                             )
+        ).withLeadingTrivia(functionCallExpr.leadingTrivia!).withTrailingTrivia(functionCallExpr.trailingTrivia!)
+        
+        return SyntaxFactory.makeMemberDeclListItem(
+            decl: DeclSyntax(testFunctionDeclaration),
+            semicolon: nil
+        )
+    }
+    
+    enum QuickSpecMethodCall {
+        case beforeEach
+        case afterEach
+        case it(testDescription: String, skipped: Bool)
+        
+        private var isSkipped: Bool {
+            guard case let .it(testDescription: _, skipped: skipped) = self else {
+                return false
+            }
+            
+            return skipped
+        }
+        
+        private var description: String {
+            switch (self) {
+            case .beforeEach: return "beforeEach"
+            case .afterEach: return "afterEach"
+            case let .it(testDescription: testDescription, skipped: _): return testDescription
+            }
+        }
+        
+        private var generatesTestMethod: Bool {
+            switch (self) {
+            case .it: return true
+            default: return false
+            }
+        }
+        
+        init(functionCallExpr: FunctionCallExprSyntax) {
+            // TODO DRY up with some other places
+            let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))!
+            
+            switch (identifierExpression.identifier.text) {
+            case "beforeEach": self = .beforeEach
+            case "afterEach": self = .afterEach
+            default: fatalError("this initializer isn't ready for other function names yet")
+            }
+        }
+        
+        func outputFunctionName(inScope scope: Scope) -> String {
+            let unsanitisedComponents: [String] = {
+                switch (self) {
+                case .beforeEach, .afterEach: return [description] + scope.map { $0.methodNameComponent }
+                case .it: return scope.map { $0.methodNameComponent } + [description]
+                }
+            }()
+            
+            let unsantisedName = ((!generatesTestMethod || unsanitisedComponents[0].starts(with: "test")) ? "" : "test") + unsanitisedComponents.joined(separator: "_")
+            
+            let withoutSymbols = unsantisedName.components(separatedBy: CharacterSet.symbols.union(CharacterSet.punctuationCharacters)).joined(separator: "_")
+            let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces).joined(separator: "_")
+            
+            // TODO iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
+            
+            return (isSkipped ? "skipped_" : "") + withoutWhitespace
+        }
     }
 }
 
