@@ -18,16 +18,18 @@ extension Array where Element == TransformQuickSpecSubclass.ScopeMember /* i.e. 
         return new
     }
     
-    var nearestAncestorHavingOwnBeforeEach: Self? {
-        guard let parent = self.parent else { return nil }
-        if (parent.last!.contentsInfo.hasOwnBeforeEach) { return parent }
-        return parent.nearestAncestorHavingOwnBeforeEach
+    func nearestAncestorHavingOwnBeforeEach(includeSelf: Bool) -> Self? {
+        if (includeSelf && last!.contentsInfo.hasOwnBeforeEach) {
+            return self
+        }
+        return parent?.nearestAncestorHavingOwnBeforeEach(includeSelf: true)
     }
     
-    var nearestAncestorHavingOwnAfterEach: Self? {
-        guard let parent = self.parent else { return nil }
-        if (parent.last!.contentsInfo.hasOwnAfterEach) { return parent }
-        return parent.nearestAncestorHavingOwnAfterEach
+    func nearestAncestorHavingOwnAfterEach(includeSelf: Bool) -> Self? {
+        if (includeSelf && last!.contentsInfo.hasOwnAfterEach) {
+            return self
+        }
+        return parent?.nearestAncestorHavingOwnAfterEach(includeSelf: true)
     }
 }
 
@@ -312,6 +314,29 @@ class TransformQuickSpecSubclass {
             preconditionFailure("I don't expect the trailing closure to have any signature, but got \(trailingClosure)")
         }
         
+        // Insert a call to the before/afterEach of the scope this `it` is contained within.
+        let newStatements: CodeBlockItemListSyntax = {
+            var newStatements = trailingClosure.statements
+            
+            // TODO DRY these up with the beforeEach / afterEach ancestor-calling code
+            
+            // beforeEach
+            if let nearestScopeHavingOwnBeforeEach = scope.nearestAncestorHavingOwnBeforeEach(includeSelf: true) {
+                let functionName = QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: nearestScopeHavingOwnBeforeEach)
+                let functionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(functionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                newStatements = newStatements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(functionCall), semicolon: nil, errorTokens: nil))
+            }
+            
+            // afterEach
+            if let nearestScopeHavingOwnAfterEach = scope.nearestAncestorHavingOwnAfterEach(includeSelf: true) {
+                let functionName = QuickSpecMethodCall.afterEach.outputFunctionName(inScope: nearestScopeHavingOwnAfterEach)
+                let functionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(functionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                newStatements = newStatements.appending(SyntaxFactory.makeCodeBlockItem(item: Syntax(functionCall), semicolon: nil, errorTokens: nil))
+            }
+            
+            return newStatements
+        }()
+        
         let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
             attributes: nil,
             modifiers: nil,
@@ -320,7 +345,7 @@ class TransformQuickSpecSubclass {
             genericParameterClause: nil,
             signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
             genericWhereClause: nil,
-            body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace.withLeadingTrivia(.spaces(1)), statements: trailingClosure.statements, rightBrace: trailingClosure.rightBrace
+            body: SyntaxFactory.makeCodeBlock(leftBrace: trailingClosure.leftBrace.withLeadingTrivia(.spaces(1)), statements: newStatements, rightBrace: trailingClosure.rightBrace
                                              )
         ).withLeadingTrivia(functionCallExpr.leadingTrivia!).withTrailingTrivia(functionCallExpr.trailingTrivia!)
         
@@ -352,14 +377,14 @@ class TransformQuickSpecSubclass {
             switch methodCall {
                 // TODO double-check the ordering of the before / after in relation to parents
             case .beforeEach:
-                guard let nearest = scope.nearestAncestorHavingOwnBeforeEach else {
+                guard let nearest = scope.nearestAncestorHavingOwnBeforeEach(includeSelf: false) else {
                     return trailingClosure.statements
                 }
                 let ancestorFunctionName = QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: nearest)
                 let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(ancestorFunctionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
                 return trailingClosure.statements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(ancestorFunctionCall), semicolon: nil, errorTokens: nil))
             case .afterEach:
-                guard let nearest = scope.nearestAncestorHavingOwnAfterEach else {
+                guard let nearest = scope.nearestAncestorHavingOwnAfterEach(includeSelf: false) else {
                     return trailingClosure.statements
                 }
                 let ancestorFunctionName = QuickSpecMethodCall.afterEach.outputFunctionName(inScope: nearest)
