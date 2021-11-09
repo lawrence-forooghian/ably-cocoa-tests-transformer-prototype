@@ -177,6 +177,8 @@ class TransformQuickSpecSubclass {
                     // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
                     // but we preserve the containing function and make it also invoke all of the test cases
                     
+                    print("\tTODO handle \(functionDeclaration.identifier.text) distinctly from `spec` – we need a scope, and we need to handle before/afterEach")
+                    
                     let declarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDeclaration)
                     
                     // OK, we need to embed this inside a class
@@ -394,9 +396,7 @@ class TransformQuickSpecSubclass {
             }
         }()
         
-        print("TODO we need to call the before/afterEach for anything we're nested inside — something's going wrong somewhere because e.g. not all of the afterEach are being detected, see e.g. PushActivationStateMachine tests where we for sure have nesting, ah, no OK, that's because it an afterEach nested in the rsh3a2a function, hmm")
-        // we do actually have one example of a propertly nested beforeEach – see "State WaitingForDeregistration" in PushActivationStateMachine tests
-        print("TODO we need to make sure the `it` methods call the before/afterEach — and decide whether to do things using blocks or not")
+        // we do actually have one example of a propertly nested beforeEach – see "State WaitingForDeregistration" in PushActivationStateMachine tests. not sure we have any afterEach
         
         let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
             attributes: nil,
