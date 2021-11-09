@@ -355,7 +355,6 @@ class TransformQuickSpecSubclass {
                 guard let nearest = scope.nearestAncestorHavingOwnBeforeEach else {
                     return trailingClosure.statements
                 }
-                print("beforeEach nesting in \(scope)")
                 let ancestorFunctionName = QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: nearest)
                 let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(ancestorFunctionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
                 return trailingClosure.statements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(ancestorFunctionCall), semicolon: nil, errorTokens: nil))
@@ -363,7 +362,6 @@ class TransformQuickSpecSubclass {
                 guard let nearest = scope.nearestAncestorHavingOwnAfterEach else {
                     return trailingClosure.statements
                 }
-                print("afterEach nesting in \(scope)")
                 let ancestorFunctionName = QuickSpecMethodCall.afterEach.outputFunctionName(inScope: nearest)
                 let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(ancestorFunctionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
                 return trailingClosure.statements.appending(SyntaxFactory.makeCodeBlockItem(item: Syntax(ancestorFunctionCall), semicolon: nil, errorTokens: nil))
