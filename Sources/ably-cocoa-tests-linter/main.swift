@@ -4,6 +4,11 @@ import Foundation
 // TODO what about stuff like comments – do they come through?
 // https://forums.swift.org/t/se-0275-allow-more-characters-like-whitespaces-and-punctuations-for-escaped-identifiers/32538/50 - what should we use as the new method names?
 
+// Guiding principles:
+// - I don't understand the test code well, and I want people to just need to review the structural changes without thinking about any behavioural ones. there seems to be a lot of state potentially shared between test cases (probably not fully intentionally, and probably not desirably) and I don't want to change that behaviour. So must behave exactly as before
+
+// TODO tidy up this code and make it bloggable / talkable / open sourceable if we so desire
+
 class TransformQuickSpecSubclass {
     struct ScopeMember: CustomStringConvertible {
         enum ScopeMemberType: CustomStringConvertible {
@@ -19,9 +24,13 @@ class TransformQuickSpecSubclass {
 
         }
         
+        struct ContentsInfo {
+            var hasOwnBeforeEach: Bool
+            var hasOwnAfterEach: Bool
+        }
+        
         var type: ScopeMemberType
-        var hasOwnBeforeEach: Bool
-        var hasOwnAfterEach: Bool
+        var contentsInfo: ContentsInfo
         
         var methodNameComponent: String {
             switch (type) {
@@ -31,7 +40,7 @@ class TransformQuickSpecSubclass {
         }
         
         var description: String {
-            return "<\(String(describing: type))" + (hasOwnBeforeEach ? ", hasOwnBeforeEach" : "") + (hasOwnAfterEach ? ", hasOwnAfterEach" : "") + ">"
+            return "<\(String(describing: type))" + (contentsInfo.hasOwnBeforeEach ? ", hasOwnBeforeEach" : "") + (contentsInfo.hasOwnAfterEach ? ", hasOwnAfterEach" : "") + ">"
         }
     }
     typealias Scope = [ScopeMember]
@@ -90,7 +99,23 @@ class TransformQuickSpecSubclass {
             fatalError("Don’t know how to handle function declaration without a body")
         }
         
-        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, hasOwnBeforeEach: false, hasOwnAfterEach: false)])
+        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, contentsInfo: ScopeMember.ContentsInfo(hasOwnBeforeEach: false, hasOwnAfterEach: false))])
+    }
+    
+    private func createScopeMemberContentsInfo(_ statements: CodeBlockItemListSyntax) -> ScopeMember.ContentsInfo {
+        return statements.reduce(ScopeMember.ContentsInfo(hasOwnBeforeEach: false, hasOwnAfterEach: false)) { result, statement in
+            guard let functionCallExpr = FunctionCallExprSyntax(statement.item), let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
+                return result
+            }
+
+            // (copied comment from elsewhere) Not exactly sure what .text is but it seems to not have whitespace / comments etc
+            let calledFunctionName = identifierExpression.identifier.text
+            
+            var newResult = result
+            newResult.hasOwnBeforeEach = newResult.hasOwnBeforeEach || (calledFunctionName == "beforeEach")
+            newResult.hasOwnAfterEach = newResult.hasOwnAfterEach || (calledFunctionName == "afterEach")
+            return newResult
+        }
     }
     
     private func transformScopeMemberBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope) -> [MemberDeclListItemSyntax] {
@@ -211,7 +236,11 @@ class TransformQuickSpecSubclass {
             
             let description = getFunctionArgument(functionCallExpr)
             
-            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), hasOwnBeforeEach: false, hasOwnAfterEach: false)])
+            // do a preflight to fetch some info about the scope's contents - hasOwnBeforeEach, hasOwnAfterEach
+            // TODO why does this give fewer hasOwnBeforeEach than we have in the codebase? I'm sure we'll find out in time
+            let contentsInfo = createScopeMemberContentsInfo(trailingClosure.statements)
+            
+            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [ScopeMember(type: .describeOrContext(description: description), contentsInfo: contentsInfo)])
         default:
             print("\tTODO handle \(scope)-level `\(calledFunctionName)`")
             return []
