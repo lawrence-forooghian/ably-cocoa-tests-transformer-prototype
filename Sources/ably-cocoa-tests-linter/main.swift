@@ -58,6 +58,16 @@ class TransformQuickSpecSubclass {
         struct ContentsInfo {
             var hasOwnBeforeEach: Bool
             var hasOwnAfterEach: Bool
+            var variableDefinitions: [VariableDefinition]
+            
+            struct VariableDefinition {
+                var originalName: String
+                var isMutable: Bool
+                
+                func mangledNameForScope(_ scope: Scope) -> String {
+                    return "TODOmangledName"
+                }
+            }
         }
         
         var type: ScopeMemberType
@@ -71,7 +81,7 @@ class TransformQuickSpecSubclass {
         }
         
         var description: String {
-            return "<\(String(describing: type))" + (contentsInfo.hasOwnBeforeEach ? ", hasOwnBeforeEach" : "") + (contentsInfo.hasOwnAfterEach ? ", hasOwnAfterEach" : "") + ">"
+            return "<\(String(describing: type))" + (contentsInfo.hasOwnBeforeEach ? ", hasOwnBeforeEach" : "") + (contentsInfo.hasOwnAfterEach ? ", hasOwnAfterEach" : "") + (contentsInfo.variableDefinitions.isEmpty ? "" : " variableDefinitions: \(contentsInfo.variableDefinitions)") + ">"
         }
     }
     typealias Scope = [ScopeMember]
@@ -136,17 +146,46 @@ class TransformQuickSpecSubclass {
     }
     
     private func createScopeMemberContentsInfo(_ statements: CodeBlockItemListSyntax) -> ScopeMember.ContentsInfo {
-        return statements.reduce(ScopeMember.ContentsInfo(hasOwnBeforeEach: false, hasOwnAfterEach: false)) { result, statement in
-            guard let functionCallExpr = FunctionCallExprSyntax(statement.item), let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
-                return result
+        return statements.reduce(ScopeMember.ContentsInfo(hasOwnBeforeEach: false, hasOwnAfterEach: false, variableDefinitions: [])) { result, statement in
+            var newResult = result
+            
+            // beforeEach / afterEach
+            if let functionCallExpr = FunctionCallExprSyntax(statement.item), let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) {
+                // (copied comment from elsewhere) Not exactly sure what .text is but it seems to not have whitespace / comments etc
+                let calledFunctionName = identifierExpression.identifier.text
+                
+                newResult.hasOwnBeforeEach = newResult.hasOwnBeforeEach || (calledFunctionName == "beforeEach")
+                newResult.hasOwnAfterEach = newResult.hasOwnAfterEach || (calledFunctionName == "afterEach")
+            }
+            
+            // variable declarations
+            if let variableDeclarationSyntax = VariableDeclSyntax(statement.item) {
+                guard variableDeclarationSyntax.bindings.count == 1 else {
+                    preconditionFailure("I don’t know how to handle variable declarations with multiple bindings")
+                }
+                let binding = variableDeclarationSyntax.bindings.first!
+                
+                let variableDeclarations: [ScopeMember.ContentsInfo.VariableDefinition]
+                
+                if let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) {
+                    variableDeclarations = [ScopeMember.ContentsInfo.VariableDefinition(originalName: identifierPattern.identifier.text /* is this correct? */, isMutable: true /* TODO */)]
+                }
+                else if let tuplePattern = binding.pattern.as(TuplePatternSyntax.self) {
+                    variableDeclarations = tuplePattern.elements.map { element in
+                        guard let identifierPattern = element.pattern.as(IdentifierPatternSyntax.self) else {
+                            preconditionFailure("I don't know how to handle a binding in a tuple that's not an identifier: \(binding.pattern)")
+                        }
+                        // TODO DRY up with the above
+                        return ScopeMember.ContentsInfo.VariableDefinition(originalName: identifierPattern.identifier.text /* is this correct? */, isMutable: true /* TODO */)
+                    }
+                    
+                } else {
+                    preconditionFailure("I don’t know how to handle bindings with patterns other than an identifier or a tuple: \(binding.pattern)")
+                }
+                
+                newResult.variableDefinitions += variableDeclarations
             }
 
-            // (copied comment from elsewhere) Not exactly sure what .text is but it seems to not have whitespace / comments etc
-            let calledFunctionName = identifierExpression.identifier.text
-            
-            var newResult = result
-            newResult.hasOwnBeforeEach = newResult.hasOwnBeforeEach || (calledFunctionName == "beforeEach")
-            newResult.hasOwnAfterEach = newResult.hasOwnAfterEach || (calledFunctionName == "afterEach")
             return newResult
         }
     }
@@ -159,14 +198,14 @@ class TransformQuickSpecSubclass {
             
             // TODO what if there's stuff that clashes?
             
-            if let variableDeclaration = VariableDeclSyntax(statement.item) {
+            /*if let variableDeclaration = VariableDeclSyntax(statement.item) {
                 // Variable declarations just get hoisted outside of spec()
                 // TODO revisit this now that it's not just spec — these need tidying up, probably grouping into some sort of object instead of just dumping everything at the top level
                 
                 let decl = DeclSyntax(variableDeclaration)
                 return [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }]
             }
-            else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
+            else */if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
                 return transformFunctionCallInsideScopeIntoClassLevelDeclarations(functionCallExpr, scope: scope)
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
