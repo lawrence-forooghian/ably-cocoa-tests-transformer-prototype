@@ -10,7 +10,6 @@ import Foundation
 // TODO tidy up this code and make it bloggable / talkable / open sourceable if we so desire
 
 // TODO I think we can make a Scope type so that we don't have to worry about things like array length (i.e. this invariant that scope is always non-empty)
-
 extension Array where Element == TransformQuickSpecSubclass.ScopeMember /* i.e. Scope */ {
     private var parent: Self? {
         guard self.count >= 2 else { return nil }
@@ -396,25 +395,6 @@ class TransformQuickSpecSubclass {
                 }
             }
             
-            // Take the new values of the local variables and put them back into the
-            // class member values
-            scope.forEach { member in
-                // emit e.g. var foo = mangledFoo
-                member.contentsInfo.variableDefinitions.forEach { definition in
-                    guard definition.isMutable else {
-                        return
-                    }
-                    
-                    print("TODO Use correct scope when printing out mangled name in `it`-derived function")
-                    let mangledName = definition.mangledNameForScope([member])
-                    
-                    // TODO No idea how to make an assignment expression, this can't be right
-                    let assignment = SyntaxFactory.makeUnknownSyntax(tokens: [SyntaxFactory.makeIdentifier(mangledName).withTrailingTrivia(.spaces(1)), SyntaxFactory.makeToken(.equal, presence: .present).withTrailingTrivia(.spaces(1)), SyntaxFactory.makeIdentifier(definition.originalName)]).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
-
-                    // TODO check the order here
-                    newStatements = newStatements.appending(SyntaxFactory.makeCodeBlockItem(item: Syntax(assignment), semicolon: nil, errorTokens: nil))
-                }
-            }
             
             // afterEach
             if let nearestScopeHavingOwnAfterEach = scope.nearestAncestorHavingOwnAfterEach(includeSelf: true) {
