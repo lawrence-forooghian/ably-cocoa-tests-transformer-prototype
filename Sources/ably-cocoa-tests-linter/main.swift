@@ -542,13 +542,17 @@ class TransformQuickSpecSubclass {
 
 // Transforms subclasses of QuickSpec to XCTestCase
 class TransformQuickSpec: SyntaxRewriter {
-    override func visit(_ node: ClassDeclSyntax) -> DeclSyntax {
-        guard let inheritanceClause = node.inheritanceClause else {
-            // If it doesn't inherit from anything, pass it through untouched.
-            return DeclSyntax(node)
+    override func visitAny(_ node: Syntax) -> Syntax? {
+        guard let classDecl = node.as(ClassDeclSyntax.self) else {
+            return nil
         }
         
-        print("Processing class \(node.identifier)")
+        guard let inheritanceClause = classDecl.inheritanceClause else {
+            // If it doesn't inherit from anything, pass it through untouched.
+            return nil
+        }
+        
+        print("Processing class \(classDecl.identifier)")
         
         let inheritedTypeCollection = inheritanceClause.inheritedTypeCollection
         
@@ -566,7 +570,7 @@ class TransformQuickSpec: SyntaxRewriter {
         
         guard let quickSpecInheritedType = quickSpecInheritedType else {
             // If it's not a subclass of QuickSpec, pass it through untouched.
-            return DeclSyntax(node)
+            return nil
         }
         
         precondition(inheritedTypeCollection.count == 1, "I’m only equipped to handle things that inherit from one thing")
@@ -587,12 +591,12 @@ class TransformQuickSpec: SyntaxRewriter {
         let newInheritedType = quickSpecInheritedType.withTypeName(newTypeName)
         let newInheritedTypes = inheritedTypeCollection.replacing(childAt: 0, with: newInheritedType)
         let newInheritanceClause = inheritanceClause.withInheritedTypeCollection(newInheritedTypes)
-        let newNode = node.withInheritanceClause(newInheritanceClause)
+        let newNode = classDecl.withInheritanceClause(newInheritanceClause)
                 
         let transformed = TransformQuickSpecSubclass(classDeclaration: newNode).transformed()
         
         print("TODO do something with the global variables \(transformed.globalVariableDeclarations)")
-        return DeclSyntax(transformed.classDecl)
+        return Syntax(transformed.classDecl)
     }
 }
 
