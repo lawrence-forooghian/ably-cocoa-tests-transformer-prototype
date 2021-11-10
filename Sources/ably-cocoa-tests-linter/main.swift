@@ -65,7 +65,8 @@ class TransformQuickSpecSubclass {
                 var isMutable: Bool
                 
                 func mangledNameForScope(_ scope: Scope) -> String {
-                    return "TODOmangledName"
+                    print("TODO mangle variable name correctly")
+                    return "\(originalName)_TODOmangledName"
                 }
             }
         }
@@ -369,7 +370,7 @@ class TransformQuickSpecSubclass {
         // Insert a call to the before/afterEach of the scope this `it` is contained within.
         let newStatements: CodeBlockItemListSyntax = {
             var newStatements = trailingClosure.statements
-            
+
             // TODO DRY these up with the beforeEach / afterEach ancestor-calling code
             
             // beforeEach
@@ -378,6 +379,22 @@ class TransformQuickSpecSubclass {
                 let functionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(functionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
                 newStatements = newStatements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(functionCall), semicolon: nil, errorTokens: nil))
             }
+            
+            // Set up the local variables that we have access to in this scope, for use
+            // in the test case.
+            scope.forEach { member in
+                // emit e.g. var foo = mangledFoo
+                member.contentsInfo.variableDefinitions.forEach { definition in
+                    print("TODO Use correct scope when printing out mangled name in `it`-derived function")
+                    let mangledName = definition.mangledNameForScope([member])
+                    let letOrVarKeyword = definition.isMutable ? SyntaxFactory.makeVarKeyword() : SyntaxFactory.makeLetKeyword()
+                    
+                    let decl = SyntaxFactory.makeVariableDecl(attributes: nil, modifiers: nil, letOrVarKeyword: letOrVarKeyword.withTrailingTrivia(.spaces(1)), bindings: SyntaxFactory.makePatternBindingList([SyntaxFactory.makePatternBinding(pattern: PatternSyntax(SyntaxFactory.makeIdentifierPattern(identifier: SyntaxFactory.makeToken(.identifier(definition.originalName), presence: .present))), typeAnnotation: nil, initializer: SyntaxFactory.makeInitializerClause(equal: SyntaxFactory.makeEqualToken(leadingTrivia: .spaces(1), trailingTrivia: .spaces(1)), value: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeIdentifier(mangledName), declNameArguments: nil))), accessor: nil, trailingComma: nil)])).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                    // TODO this prepending is kinda backwards - reverses the original order
+                    newStatements = newStatements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(decl), semicolon: nil, errorTokens: nil))
+                }
+            }
+            
             
             // afterEach
             if let nearestScopeHavingOwnAfterEach = scope.nearestAncestorHavingOwnAfterEach(includeSelf: true) {
