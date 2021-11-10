@@ -484,6 +484,16 @@ class TransformQuickSpecSubclass {
 
 // Transforms subclasses of QuickSpec to XCTestCase
 class TransformQuickSpec: SyntaxRewriter {
+    override func visitAny(_ node: Syntax) -> Syntax? {
+        // Get rid of `import Quick` decls.
+        if let importDecl = node.as(ImportDeclSyntax.self), importDecl.path.count == 1 && importDecl
+            .path.firstToken?.text == "Quick" {
+            // No idea if this is the right way to remove a node, seems a bit dodgy but works
+            return Syntax(SyntaxFactory.makeToken(.unknown(""), presence: .present))
+        }
+        return nil
+    }
+    
     override func visit(_ node: ClassDeclSyntax) -> DeclSyntax {
         guard let inheritanceClause = node.inheritanceClause else {
             // If it doesn't inherit from anything, pass it through untouched.
