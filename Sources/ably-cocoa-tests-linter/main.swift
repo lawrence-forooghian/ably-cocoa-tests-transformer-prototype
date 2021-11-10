@@ -168,15 +168,19 @@ class TransformQuickSpecSubclass {
                 let variableDeclarations: [ScopeMember.ContentsInfo.VariableDefinition]
                 
                 if let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) {
-                    variableDeclarations = [ScopeMember.ContentsInfo.VariableDefinition(originalName: identifierPattern.identifier.text /* is this correct? */, isMutable: true /* TODO */)]
+                    // TODO this must be wrong!
+                    let isMutable = (variableDeclarationSyntax.letOrVarKeyword.text == "var")
+                    variableDeclarations = [ScopeMember.ContentsInfo.VariableDefinition(originalName: identifierPattern.identifier.text /* is this correct? */, isMutable: isMutable)]
                 }
                 else if let tuplePattern = binding.pattern.as(TuplePatternSyntax.self) {
                     variableDeclarations = tuplePattern.elements.map { element in
                         guard let identifierPattern = element.pattern.as(IdentifierPatternSyntax.self) else {
                             preconditionFailure("I don't know how to handle a binding in a tuple that's not an identifier: \(binding.pattern)")
                         }
+                        let isMutable = (variableDeclarationSyntax.letOrVarKeyword.text == "let")
+
                         // TODO DRY up with the above
-                        return ScopeMember.ContentsInfo.VariableDefinition(originalName: identifierPattern.identifier.text /* is this correct? */, isMutable: true /* TODO */)
+                        return ScopeMember.ContentsInfo.VariableDefinition(originalName: identifierPattern.identifier.text /* is this correct? */, isMutable: isMutable)
                     }
                     
                 } else {
