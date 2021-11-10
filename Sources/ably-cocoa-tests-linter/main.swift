@@ -594,9 +594,13 @@ class TransformQuickSpec: SyntaxRewriter {
         let newNode = classDecl.withInheritanceClause(newInheritanceClause)
                 
         let transformed = TransformQuickSpecSubclass(classDeclaration: newNode).transformed()
+                
+        let codeBlockItemList = SyntaxFactory.makeCodeBlockItemList([
+            transformed.globalVariableDeclarations.map { decl in SyntaxFactory.makeCodeBlockItem(item: Syntax(decl), semicolon: nil, errorTokens: nil)},
+            [SyntaxFactory.makeCodeBlockItem(item: Syntax(transformed.classDecl), semicolon: nil, errorTokens: nil)]
+        ].flatMap { $0 })
         
-        print("TODO do something with the global variables \(transformed.globalVariableDeclarations)")
-        return Syntax(transformed.classDecl)
+        return Syntax(codeBlockItemList)
     }
 }
 
