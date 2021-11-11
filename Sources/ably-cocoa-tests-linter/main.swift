@@ -242,7 +242,7 @@ class TransformQuickSpecSubclass {
                 return TransformationResult(classLevelDeclarations: [], globalDeclarations: [DeclSyntax(modifiedToPrivateVariableDeclaration)])
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
-                return transformFunctionCallInsideScopeIntoClassLevelDeclarations(functionCallExpr, scope: scope)
+                return transformFunctionCallInsideScopeIntoClassLevelDeclarations(functionCallExpr, scope: scope, isFakeSpec: isFakeSpec)
             }
             else if let structDeclaration = StructDeclSyntax(statement.item) {
                 // Struct declarations just get hoisted outside of spec()
@@ -345,7 +345,7 @@ class TransformQuickSpecSubclass {
         return memberDeclListItems
     }
     
-    private func transformFunctionCallInsideScopeIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> TransformationResult {
+    private func transformFunctionCallInsideScopeIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope, isFakeSpec: Bool) -> TransformationResult {
         guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
             print("Expected an identifier, but got \(functionCallExpr)")
             return TransformationResult(classLevelDeclarations: [], globalDeclarations: [])
@@ -371,7 +371,14 @@ class TransformQuickSpecSubclass {
             
             let scopeMember = ScopeMember(type: .describeOrContext(description: description, skipped: calledFunctionName.starts(with: "x")), contentsInfo: contentsInfo)
             
-            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [scopeMember], isFakeSpec: false)
+            var transformationResult = transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [scopeMember], isFakeSpec: isFakeSpec)
+            if !transformationResult.classLevelDeclarations.isEmpty {
+                // preserve any comments that came alongside the function call
+                // TODO it's a bit messed up though, see e.g. "32 bytes" comment
+                // and a bunch of unwanted whitespace
+                transformationResult.classLevelDeclarations[0].leadingTrivia = functionCallExpr.leadingTrivia! + transformationResult.classLevelDeclarations[0].leadingTrivia!
+            }
+            return transformationResult
         case "beforeEach", "afterEach":
             return TransformationResult(classLevelDeclarations: [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)], globalDeclarations: [])
         default:
