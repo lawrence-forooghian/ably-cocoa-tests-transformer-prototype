@@ -219,7 +219,17 @@ class TransformQuickSpecSubclass {
             if let variableDeclaration = VariableDeclSyntax(statement.item) {
                 // Variable declarations just get hoisted outside of spec()
                 // TODO revisit this now that it's not just spec — these need tidying up, probably grouping into some sort of object instead of just dumping everything at the top level
-                return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [variableDeclaration])
+                let leadingTrivia = variableDeclaration.leadingTrivia!
+                var modifiedToPrivateVariableDeclaration = variableDeclaration
+                modifiedToPrivateVariableDeclaration.leadingTrivia = .zero
+                
+                let oldModifiers = modifiedToPrivateVariableDeclaration.modifiers ?? SyntaxFactory.makeModifierList([])
+
+                let newModifiers = oldModifiers.prepending(SyntaxFactory.makeDeclModifier(name: SyntaxFactory.makePrivateKeyword(), detailLeftParen: nil, detail: nil, detailRightParen: nil).withLeadingTrivia(leadingTrivia).withTrailingTrivia(.spaces(1)))
+                
+                modifiedToPrivateVariableDeclaration = modifiedToPrivateVariableDeclaration.withModifiers(newModifiers)
+
+                return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [modifiedToPrivateVariableDeclaration])
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
                 return transformFunctionCallInsideScopeIntoClassLevelDeclarations(functionCallExpr, scope: scope)
