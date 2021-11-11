@@ -136,6 +136,7 @@ class TransformQuickSpecSubclass {
         guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self), specFunctionDecl.identifier.text == "spec" else {
             if let variableDeclaration = member.decl.as(VariableDeclSyntax.self) {
                 print("TODO check that the class variable declaration \(variableDeclaration) doesn't shadow our newly-created global variables")
+                print("TODO check that there isn't a variable called `name` because that will be shadowed by an XCTestCase method")
             }
             return TransformationResult(classLevelDeclarations: [member], globalDeclarations: [])
         }
