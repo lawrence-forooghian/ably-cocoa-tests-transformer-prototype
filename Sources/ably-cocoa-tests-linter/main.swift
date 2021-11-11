@@ -99,7 +99,7 @@ class TransformQuickSpecSubclass {
     }
     
     struct TransformedClass {
-        var globalVariableDeclarations: [VariableDeclSyntax]
+        var globalDeclarations: [DeclSyntax]
         var classDecl: ClassDeclSyntax
     }
     
@@ -113,7 +113,7 @@ class TransformQuickSpecSubclass {
             return transformClassMember(member)
         }
         let newDeclListItems = transformationResults.flatMap { $0.classLevelDeclarations }
-        let globalVariableDeclarations = transformationResults.flatMap { $0.globalVariableDeclarations }
+        let globalVariableDeclarations = transformationResults.flatMap { $0.globalDeclarations }
         
         let newMembersBlock = MemberDeclBlockSyntax { builder in
             builder.useLeftBrace(originalMembersBlock.leftBrace)
@@ -126,7 +126,7 @@ class TransformQuickSpecSubclass {
         
         result.members = newMembersBlock
         
-        return TransformedClass(globalVariableDeclarations: globalVariableDeclarations, classDecl: result)
+        return TransformedClass(globalDeclarations: globalVariableDeclarations, classDecl: result)
     }
     
     private func transformClassMember(_ member: MemberDeclListItemSyntax) -> TransformationResult {
@@ -134,7 +134,10 @@ class TransformQuickSpecSubclass {
         // we can pass through
         
         guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self), specFunctionDecl.identifier.text == "spec" else {
-            return TransformationResult(classLevelDeclarations: [member], globalVariableDeclarations: [])
+            if let variableDeclaration = member.decl.as(VariableDeclSyntax.self) {
+                print("TODO check that the class variable declaration \(variableDeclaration) doesn't shadow our newly-created global variables")
+            }
+            return TransformationResult(classLevelDeclarations: [member], globalDeclarations: [])
         }
         
         return transformSpecFunctionDeclarationIntoClassLevelDeclarations(specFunctionDecl, isFakeSpec: false)
@@ -203,7 +206,7 @@ class TransformQuickSpecSubclass {
     
     struct TransformationResult {
         var classLevelDeclarations: [MemberDeclListItemSyntax]
-        var globalVariableDeclarations: [VariableDeclSyntax]
+        var globalDeclarations: [DeclSyntax]
     }
     
     private func transformScopeMemberBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope, isFakeSpec: Bool /* TODO this param needs improving */) -> TransformationResult {
@@ -220,11 +223,11 @@ class TransformQuickSpecSubclass {
                 if isFakeSpec {
                     // it's not a function call's closure we're inside, it's a function body with local variables, which will remain a function, so can keep its variables intact
                     let decl = DeclSyntax(variableDeclaration)
-                    return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }], globalVariableDeclarations: [])
+                    return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }], globalDeclarations: [])
                 }
                 
-                // Variable declarations just get hoisted outside of spec()
-                // TODO revisit this now that it's not just spec — these need tidying up, probably grouping into some sort of object instead of just dumping everything at the top level
+                // Variable declarations in the body of a trailing closure passed to spec / describe etc
+                // get hoisted to private global variables
                 let leadingTrivia = variableDeclaration.leadingTrivia!
                 var modifiedToPrivateVariableDeclaration = variableDeclaration
                 modifiedToPrivateVariableDeclaration.leadingTrivia = .zero
@@ -235,7 +238,7 @@ class TransformQuickSpecSubclass {
                 
                 modifiedToPrivateVariableDeclaration = modifiedToPrivateVariableDeclaration.withModifiers(newModifiers)
 
-                return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [modifiedToPrivateVariableDeclaration])
+                return TransformationResult(classLevelDeclarations: [], globalDeclarations: [DeclSyntax(modifiedToPrivateVariableDeclaration)])
             }
             else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
                 return transformFunctionCallInsideScopeIntoClassLevelDeclarations(functionCallExpr, scope: scope)
@@ -245,7 +248,7 @@ class TransformQuickSpecSubclass {
                 // We only have one of these
                 
                 let decl = DeclSyntax(structDeclaration)
-                return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }], globalVariableDeclarations: [])
+                return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }], globalDeclarations: [])
             }
             else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
                 // TODO The alternative here would probably be, instead of allow-listing everything,
@@ -294,7 +297,7 @@ class TransformQuickSpecSubclass {
                     
                     newFunctionDeclaration.body!.statements = SyntaxFactory.makeCodeBlockItemList(codeBlockItemsFromFunction + testFunctionInvocationCodeBlockItems)
                     
-                    return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }], globalVariableDeclarations: [])
+                    return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(newFunctionDeclaration)) }], globalDeclarations: [])
                 }
                 
                 if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture", "testFakeNetworkResponse", "testSupportsAESEncryptionWithKeyLength", "testOptionsGiveDefaultAuthMethod", "testOptionsGiveBasicAuthFalse", "testRestoresDefaultPrimaryHostAfterTimeoutExpires", "testStoresSuccessfulFallbackHostAsDefaultHost", "testUsesAlternativeHost", "testUsesAnotherFallbackHost", "testMovesToDisconnectedWithNetworkingError", "testStopsClientWithOptions", "testSuspendedStateResultsInError", "testResultsInErrorWithConnectionState", "testUsesAlternativeHostOnResponse"].contains(functionDeclaration.identifier.text)) {
@@ -304,20 +307,38 @@ class TransformQuickSpecSubclass {
                     // TODO does the XCTest framework know what to do with these?
                     // TODO what if any of these use some context-local variables and we just shove them at the top level; is that maybe a problem? Maybe we need an object to contain everything, might be easiest
                     // TODO we can make this simpler once we start introducing scope objects – then these become methods on the scope or something and we pass em through. Except for anything containing it / context / describe — those get treated like a `spec`.
-                    return TransformationResult(classLevelDeclarations: [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }], globalVariableDeclarations: [])
+                    return TransformationResult(classLevelDeclarations: [ MemberDeclListItemSyntax { builder in builder.useDecl(DeclSyntax(functionDeclaration)) }], globalDeclarations: [])
                 }
                 
-                print("\tTODO handle \(scope)-level declaration of function `\(functionDeclaration.identifier)`")
-                return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [])
+                if isFakeSpec {
+                    // it's not a function call's closure we're inside, it's a function body with local functions, which will remain a function, so can keep its functions intact
+                    // TODO see if we actually have any of this in our codebase
+                    let decl = DeclSyntax(functionDeclaration)
+                    return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }], globalDeclarations: [])
+                }
+  
+                // Functions declarations in the body of a trailing closure passed to spec / describe etc
+                // get hoisted to private global functions
+                let leadingTrivia = functionDeclaration.leadingTrivia!
+                var modifiedToPrivateFunctionDeclaration = functionDeclaration
+                modifiedToPrivateFunctionDeclaration.leadingTrivia = .zero
                 
+                // TODO DRY up this privatising with variable declarations
+                let oldModifiers = modifiedToPrivateFunctionDeclaration.modifiers ?? SyntaxFactory.makeModifierList([])
+
+                let newModifiers = oldModifiers.prepending(SyntaxFactory.makeDeclModifier(name: SyntaxFactory.makePrivateKeyword(), detailLeftParen: nil, detail: nil, detailRightParen: nil).withLeadingTrivia(leadingTrivia).withTrailingTrivia(.spaces(1)))
+                
+                modifiedToPrivateFunctionDeclaration = modifiedToPrivateFunctionDeclaration.withModifiers(newModifiers)
+
+                return TransformationResult(classLevelDeclarations: [], globalDeclarations: [DeclSyntax(modifiedToPrivateFunctionDeclaration)])
             }
             else {
                 print("\tTODO handle \(scope)-level \(statement.item)")
-                return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [])
+                return TransformationResult(classLevelDeclarations: [], globalDeclarations: [])
             }
-        }.reduce(TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: []) /* TODO an `empty` method */) { accum, val in
+        }.reduce(TransformationResult(classLevelDeclarations: [], globalDeclarations: []) /* TODO an `empty` method */) { accum, val in
             // TODO from a Swifty point of view it would be nice to define a `+` here
-            return TransformationResult(classLevelDeclarations: accum.classLevelDeclarations + val.classLevelDeclarations, globalVariableDeclarations: accum.globalVariableDeclarations + val.globalVariableDeclarations)
+            return TransformationResult(classLevelDeclarations: accum.classLevelDeclarations + val.classLevelDeclarations, globalDeclarations: accum.globalDeclarations + val.globalDeclarations)
         }
         
         return memberDeclListItems
@@ -326,7 +347,7 @@ class TransformQuickSpecSubclass {
     private func transformFunctionCallInsideScopeIntoClassLevelDeclarations(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope) -> TransformationResult {
         guard let identifierExpression = IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression)) else {
             print("Expected an identifier, but got \(functionCallExpr)")
-            return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [])
+            return TransformationResult(classLevelDeclarations: [], globalDeclarations: [])
         }
         
         // Not exactly sure what .text is but it seems to not have whitespace / comments etc
@@ -334,7 +355,7 @@ class TransformQuickSpecSubclass {
         
         switch (calledFunctionName) {
         case "it", "xit":
-            return TransformationResult(classLevelDeclarations: [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: calledFunctionName == "xit")], globalVariableDeclarations: [])
+            return TransformationResult(classLevelDeclarations: [transformItFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope, skipped: calledFunctionName == "xit")], globalDeclarations: [])
         case "describe", "xdescribe", "context", "xcontext":
             guard let trailingClosure = functionCallExpr.trailingClosure else {
                 // TODO DRY up with `it`
@@ -351,10 +372,10 @@ class TransformQuickSpecSubclass {
             
             return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [scopeMember], isFakeSpec: false)
         case "beforeEach", "afterEach":
-            return TransformationResult(classLevelDeclarations: [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)], globalVariableDeclarations: [])
+            return TransformationResult(classLevelDeclarations: [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)], globalDeclarations: [])
         default:
             print("\tTODO handle \(scope)-level call to `\(calledFunctionName)`")
-            return TransformationResult(classLevelDeclarations: [], globalVariableDeclarations: [])
+            return TransformationResult(classLevelDeclarations: [], globalDeclarations: [])
         }
     }
     
@@ -612,7 +633,7 @@ class TransformQuickSpec: SyntaxRewriter {
         let transformed = TransformQuickSpecSubclass(classDeclaration: newNode).transformed()
                 
         let codeBlockItemList = SyntaxFactory.makeCodeBlockItemList([
-            transformed.globalVariableDeclarations.map { decl in SyntaxFactory.makeCodeBlockItem(item: Syntax(decl), semicolon: nil, errorTokens: nil)},
+            transformed.globalDeclarations.map { decl in SyntaxFactory.makeCodeBlockItem(item: Syntax(decl), semicolon: nil, errorTokens: nil)},
             [SyntaxFactory.makeCodeBlockItem(item: Syntax(transformed.classDecl), semicolon: nil, errorTokens: nil)]
         ].flatMap { $0 })
         
