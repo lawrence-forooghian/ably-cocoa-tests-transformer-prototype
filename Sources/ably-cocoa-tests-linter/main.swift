@@ -137,10 +137,10 @@ class TransformQuickSpecSubclass {
             return TransformationResult(classLevelDeclarations: [member], globalVariableDeclarations: [])
         }
         
-        return transformSpecFunctionDeclarationIntoClassLevelDeclarations(specFunctionDecl)
+        return transformSpecFunctionDeclarationIntoClassLevelDeclarations(specFunctionDecl, isFakeSpec: false)
     }
     
-    private func transformSpecFunctionDeclarationIntoClassLevelDeclarations(_ specFunctionDeclaration: FunctionDeclSyntax) -> TransformationResult {
+    private func transformSpecFunctionDeclarationIntoClassLevelDeclarations(_ specFunctionDeclaration: FunctionDeclSyntax, isFakeSpec: Bool) -> TransformationResult {
         // I think we want to lift the whole body of spec() and pull it out to the class body, keeping the variable declarations etc (see e.g. RestClient's spec)
         
         guard let specFunctionBody = specFunctionDeclaration.body else {
@@ -149,7 +149,7 @@ class TransformQuickSpecSubclass {
         
         let contentsInfo = createScopeMemberContentsInfo(specFunctionBody.statements)
         
-        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, contentsInfo: contentsInfo)])
+        return transformScopeMemberBodyIntoClassLevelDeclarations(specFunctionBody.statements, scope: [ScopeMember(type: .spec, contentsInfo: contentsInfo)], isFakeSpec: isFakeSpec)
     }
     
     private func createScopeMemberContentsInfo(_ statements: CodeBlockItemListSyntax) -> ScopeMember.ContentsInfo {
@@ -206,7 +206,7 @@ class TransformQuickSpecSubclass {
         var globalVariableDeclarations: [VariableDeclSyntax]
     }
     
-    private func transformScopeMemberBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope) -> TransformationResult {
+    private func transformScopeMemberBodyIntoClassLevelDeclarations(_ statements: CodeBlockItemListSyntax, scope: Scope, isFakeSpec: Bool /* TODO this param needs improving */) -> TransformationResult {
         // TODO remove references to spec() here, and check they still apply
         
         let memberDeclListItems = statements.map { statement -> TransformationResult in
@@ -217,6 +217,12 @@ class TransformQuickSpecSubclass {
             // TODO if we wanted to split up the different aspects of transformation (class level, global level) best would be to create some domain-specific AST-like thing and then do whatever we want with that afterwards
             
             if let variableDeclaration = VariableDeclSyntax(statement.item) {
+                if isFakeSpec {
+                    // it's not a function call's closure we're inside, it's a function body with local variables, which will remain a function, so can keep its variables intact
+                    let decl = DeclSyntax(variableDeclaration)
+                    return TransformationResult(classLevelDeclarations: [MemberDeclListItemSyntax { builder in builder.useDecl(decl) }], globalVariableDeclarations: [])
+                }
+                
                 // Variable declarations just get hoisted outside of spec()
                 // TODO revisit this now that it's not just spec — these need tidying up, probably grouping into some sort of object instead of just dumping everything at the top level
                 let leadingTrivia = variableDeclaration.leadingTrivia!
@@ -251,7 +257,7 @@ class TransformQuickSpecSubclass {
                     
                     print("\tTODO handle \(functionDeclaration.identifier.text) distinctly from `spec` – we need a scope, and we need to handle before/afterEach")
                     
-                    let declarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDeclaration).classLevelDeclarations
+                    let declarations = transformSpecFunctionDeclarationIntoClassLevelDeclarations(functionDeclaration, isFakeSpec: true).classLevelDeclarations
                     
                     // OK, we need to embed this inside a class
                     // wait, no, we'll keep it as a function call
@@ -343,7 +349,7 @@ class TransformQuickSpecSubclass {
             
             let scopeMember = ScopeMember(type: .describeOrContext(description: description, skipped: calledFunctionName.starts(with: "x")), contentsInfo: contentsInfo)
             
-            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [scopeMember])
+            return transformScopeMemberBodyIntoClassLevelDeclarations(trailingClosure.statements, scope: scope + [scopeMember], isFakeSpec: false)
         case "beforeEach", "afterEach":
             return TransformationResult(classLevelDeclarations: [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)], globalVariableDeclarations: [])
         default:
