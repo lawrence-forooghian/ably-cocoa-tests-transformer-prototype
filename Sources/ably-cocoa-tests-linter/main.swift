@@ -255,7 +255,7 @@ class TransformQuickSpecSubclass {
                 // TODO The alternative here would probably be, instead of allow-listing everything,
                 // to treat any function that contains calls to `context` etc as an instance of this case
                 // TODO let's emit a warning when thsi returns no test cases? probably means we unrolled a loop incorrectly
-                if (["rsh3a2a", "rsh3d2", "testFixture", "testAttribute", "testDirection", "testRequestType", "testStateWaitingForRegistrationSyncThrough", "testTokenRequestFromJson", "testPresencePerformMethod"].contains(functionDeclaration.identifier.text)) {
+                if (functionDeclaration.identifier.text.starts(with: "reusableTests")) {
                     // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
                     // but we preserve the containing function and make it also invoke all of the test cases
                     
@@ -302,6 +302,8 @@ class TransformQuickSpecSubclass {
                 }
                 
                 if (["testWithUntilAttach", "testHandlesDecodingErrorInFixture", "testFakeNetworkResponse", "testSupportsAESEncryptionWithKeyLength", "testOptionsGiveDefaultAuthMethod", "testOptionsGiveBasicAuthFalse", "testRestoresDefaultPrimaryHostAfterTimeoutExpires", "testStoresSuccessfulFallbackHostAsDefaultHost", "testUsesAlternativeHost", "testUsesAnotherFallbackHost", "testMovesToDisconnectedWithNetworkingError", "testStopsClientWithOptions", "testSuspendedStateResultsInError", "testResultsInErrorWithConnectionState", "testUsesAlternativeHostOnResponse"].contains(functionDeclaration.identifier.text)) {
+                    // TODO there's probably no need for this allow list actually — we probably just want to handle these like any other function and stick it at the global level.
+                    
                     // This is a test function that directly contains assertions, we just pass it through
                     // TODO is there a neater way to do this? e.g. a special return type / method name
                     // TODO should we also namespace these, e.g. 'testHandlesDecodingErrorInFixture' in RealtimeClientChannel, which is inside a context?
@@ -382,7 +384,12 @@ class TransformQuickSpecSubclass {
         case "beforeEach", "afterEach":
             return TransformationResult(classLevelDeclarations: [transformBeforeOrAfterEachFunctionCallIntoClassLevelDeclaration(functionCallExpr, scope: scope)], globalDeclarations: [])
         default:
+            if calledFunctionName.starts(with: "reusableTests") {
+                return TransformationResult(classLevelDeclarations: [transformReusableTestsFunctionCallIntoClassLevelDeclaration(functionCallExpr, calledFunctionName: calledFunctionName, scope: scope)], globalDeclarations: [])
+            }
+            
             print("\tTODO handle \(scope)-level call to `\(calledFunctionName)`")
+            
             return TransformationResult(classLevelDeclarations: [], globalDeclarations: [])
         }
     }
@@ -407,6 +414,55 @@ class TransformQuickSpecSubclass {
         let testDescription = firstSegment.firstToken!.text
         
         return testDescription
+    }
+    
+    // TODO DRY up with transformItFunctionCallIntoClassLevelDeclaration
+    private func transformReusableTestsFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, calledFunctionName: String, scope: Scope) -> MemberDeclListItemSyntax {
+        // this reusableTests* function call gets turned into a method
+        let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false).outputFunctionName(inScope: scope)
+        
+        let codeBlockItem = SyntaxFactory.makeCodeBlockItem(item: Syntax(functionCallExpr), semicolon: nil, errorTokens: nil)
+        let statements = SyntaxFactory.makeCodeBlockItemList([codeBlockItem])
+        
+        // Insert a call to the before/afterEach of the scope this function call is contained within.
+        let newStatements: CodeBlockItemListSyntax = {
+            var newStatements = statements
+            
+            // TODO DRY these up with the beforeEach / afterEach ancestor-calling code
+            
+            // beforeEach
+            if let nearestScopeHavingOwnBeforeEach = scope.nearestAncestorHavingOwnBeforeEach(includeSelf: true) {
+                let functionName = QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: nearestScopeHavingOwnBeforeEach)
+                let functionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(functionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                newStatements = newStatements.prepending(SyntaxFactory.makeCodeBlockItem(item: Syntax(functionCall), semicolon: nil, errorTokens: nil))
+            }
+            
+            // afterEach
+            if let nearestScopeHavingOwnAfterEach = scope.nearestAncestorHavingOwnAfterEach(includeSelf: true) {
+                let functionName = QuickSpecMethodCall.afterEach.outputFunctionName(inScope: nearestScopeHavingOwnAfterEach)
+                let functionCall = SyntaxFactory.makeFunctionCallExpr(calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeToken(.identifier(functionName), presence: .present), declNameArguments: nil)), leftParen: SyntaxFactory.makeLeftParenToken(), argumentList: SyntaxFactory.makeBlankTupleExprElementList(), rightParen: SyntaxFactory.makeRightParenToken(), trailingClosure: nil, additionalTrailingClosures: nil).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+                newStatements = newStatements.appending(SyntaxFactory.makeCodeBlockItem(item: Syntax(functionCall), semicolon: nil, errorTokens: nil))
+            }
+            
+            return newStatements
+        }()
+        
+        let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
+            attributes: nil,
+            modifiers: nil,
+            funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
+            identifier: SyntaxFactory.makeIdentifier(methodName),
+            genericParameterClause: nil,
+            signature: SyntaxFactory.makeFunctionSignature(input: SyntaxFactory.makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(), parameterList: SyntaxFactory.makeBlankFunctionParameterList(), rightParen: SyntaxFactory.makeRightParenToken()), asyncOrReasyncKeyword: nil, throwsOrRethrowsKeyword: nil, output: nil),
+            genericWhereClause: nil,
+            body: SyntaxFactory.makeCodeBlock(leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)), statements: newStatements, rightBrace: SyntaxFactory.makeRightBraceToken()
+                                             )
+        ).withLeadingTrivia(functionCallExpr.leadingTrivia!).withTrailingTrivia(functionCallExpr.trailingTrivia!)
+        
+        return SyntaxFactory.makeMemberDeclListItem(
+            decl: DeclSyntax(testFunctionDeclaration),
+            semicolon: nil
+        )
     }
 
     private func transformItFunctionCallIntoClassLevelDeclaration(_ functionCallExpr: FunctionCallExprSyntax, scope: Scope, skipped: Bool) -> MemberDeclListItemSyntax {
