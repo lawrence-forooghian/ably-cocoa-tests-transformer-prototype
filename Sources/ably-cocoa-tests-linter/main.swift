@@ -169,7 +169,7 @@ class TransformQuickSpecSubclass {
             fatalError("Don’t know how to handle function declaration without a body")
         }
 
-        let contentsInfo = createScopeMemberContentsInfo(functionBody.statements)
+        let contentsInfo = createContentsInfo(fromStatements: functionBody.statements)
 
         return transformStatements(
             functionBody.statements,
@@ -178,7 +178,7 @@ class TransformQuickSpecSubclass {
         )
     }
 
-    private func createScopeMemberContentsInfo(_ statements: CodeBlockItemListSyntax) -> ScopeMember
+    private func createContentsInfo(fromStatements statements: CodeBlockItemListSyntax) -> ScopeMember
         .ContentsInfo
     {
         return statements.reduce(ScopeMember.ContentsInfo(
@@ -529,7 +529,7 @@ class TransformQuickSpecSubclass {
 
             // do a preflight to fetch some info about the scope's contents - hasOwnBeforeEach, hasOwnAfterEach
             // TODO: why does this give fewer hasOwnBeforeEach than we have in the codebase? I'm sure we'll find out in time
-            let contentsInfo = createScopeMemberContentsInfo(trailingClosure.statements)
+            let contentsInfo = createContentsInfo(fromStatements: trailingClosure.statements)
 
             let scopeMember = ScopeMember(
                 type: .describeOrContext(description: description,
