@@ -168,7 +168,7 @@ class TransformQuickSpecSubclass {
                     // but we preserve the containing function and make it also invoke all of the test cases
 
                     print(
-                        "\tTODO handle \(functionDeclaration.identifier.text) distinctly from `spec` – we need a scope, and we need to handle before/afterEach"
+                        "\tTODO handle \(functionDeclaration.identifier.text) distinctly from `spec` – we need a scope,  we need to handle before/afterEach, and we need to decide whether it should be a global function or class (consistency would mean global, but it's worse for reviewing)"
                     )
 
                     let declarations = transformSpecOrReusableTestsFunctionDeclaration(
@@ -238,34 +238,6 @@ class TransformQuickSpecSubclass {
                     return ClassMemberTransformationResult(
                         classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                             builder.useDecl(DeclSyntax(newFunctionDeclaration))
-                        }],
-                        globalDeclarations: []
-                    )
-                }
-
-                if [
-                    "testWithUntilAttach",
-                    "testHandlesDecodingErrorInFixture",
-                    "testFakeNetworkResponse",
-                    "testSupportsAESEncryptionWithKeyLength",
-                    "testOptionsGiveDefaultAuthMethod",
-                    "testOptionsGiveBasicAuthFalse",
-                    "testRestoresDefaultPrimaryHostAfterTimeoutExpires",
-                    "testStoresSuccessfulFallbackHostAsDefaultHost",
-                    "testUsesAlternativeHost",
-                    "testUsesAnotherFallbackHost",
-                    "testMovesToDisconnectedWithNetworkingError",
-                    "testStopsClientWithOptions",
-                    "testSuspendedStateResultsInError",
-                    "testResultsInErrorWithConnectionState",
-                    "testUsesAlternativeHostOnResponse",
-                ].contains(functionDeclaration.identifier.text) {
-                    // TODO: there's probably no need for this allow list actually — we probably just want to handle these like any other function and stick it at the global level.
-
-                    // This is a test function that directly contains assertions, we just pass it through
-                    return ClassMemberTransformationResult(
-                        classLevelDeclarations: [MemberDeclListItemSyntax { builder in
-                            builder.useDecl(DeclSyntax(functionDeclaration))
                         }],
                         globalDeclarations: []
                     )
