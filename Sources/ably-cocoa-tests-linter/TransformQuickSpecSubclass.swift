@@ -336,11 +336,7 @@ class TransformQuickSpecSubclass {
         guard let identifierExpression =
             IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))
         else {
-            print("Expected an identifier, but got \(functionCallExpr)")
-            return ClassMemberTransformationResult(
-                classLevelDeclarations: [],
-                globalDeclarations: []
-            )
+            preconditionFailure("Expected an identifier, but got \(functionCallExpr)")
         }
 
         // Not exactly sure what .text is but it seems to not have whitespace / comments etc
@@ -352,36 +348,12 @@ class TransformQuickSpecSubclass {
         case "xit":
             return transformItFunctionCall(functionCallExpr, insideScope: scope, skipped: true)
         case "describe", "xdescribe", "context", "xcontext":
-            guard let trailingClosure = functionCallExpr.trailingClosure else {
-                // TODO: DRY up with `it`
-                preconditionFailure("Expected a trailing closure")
-            }
-
-            let description = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
-
-            // do a preflight to fetch some info about the scope's contents - hasOwnBeforeEach, hasOwnAfterEach
-            // TODO: why does this give fewer hasOwnBeforeEach than we have in the codebase? I'm sure we'll find out in time
-            let contentsInfo = ScopeMember.ContentsInfo(statements: trailingClosure.statements)
-
-            let scopeMember = ScopeMember(
-                type: .describeOrContext(description: description,
-                                         skipped: calledFunctionName.starts(with: "x")),
-                contentsInfo: contentsInfo
-            )
-
-            var transformationResult = transformStatements(
-                trailingClosure.statements,
-                immediatelyInsideScope: scope + [scopeMember],
+            return transformDescribeOrContextFunctionCall(
+                functionCallExpr,
+                insideScope: scope,
+                skipped: calledFunctionName.starts(with: "x"),
                 isFakeSpec: isFakeSpec
             )
-            if !transformationResult.classLevelDeclarations.isEmpty {
-                // preserve any comments that came alongside the function call
-                // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
-                // and a bunch of unwanted whitespace
-                transformationResult.classLevelDeclarations[0].leadingTrivia = functionCallExpr
-                    .leadingTrivia! + transformationResult.classLevelDeclarations[0].leadingTrivia!
-            }
-            return transformationResult
         case "beforeEach", "afterEach":
             return transformBeforeOrAfterEachFunctionCall(
                 functionCallExpr,
@@ -398,6 +370,44 @@ class TransformQuickSpecSubclass {
 
             preconditionFailure("Unexpected \(scope)-level call to \(calledFunctionName)")
         }
+    }
+
+    private func transformDescribeOrContextFunctionCall(
+        _ functionCallExpr: FunctionCallExprSyntax,
+        insideScope scope: Scope,
+        skipped: Bool,
+        isFakeSpec: Bool
+    ) -> ClassMemberTransformationResult {
+        guard let trailingClosure = functionCallExpr.trailingClosure else {
+            // TODO: DRY up with `it`
+            preconditionFailure("Expected a trailing closure")
+        }
+
+        let description = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
+
+        // do a preflight to fetch some info about the scope's contents - hasOwnBeforeEach, hasOwnAfterEach
+        // TODO: why does this give fewer hasOwnBeforeEach than we have in the codebase? I'm sure we'll find out in time
+        let contentsInfo = ScopeMember.ContentsInfo(statements: trailingClosure.statements)
+
+        let scopeMember = ScopeMember(
+            type: .describeOrContext(description: description,
+                                     skipped: skipped),
+            contentsInfo: contentsInfo
+        )
+
+        var transformationResult = transformStatements(
+            trailingClosure.statements,
+            immediatelyInsideScope: scope + [scopeMember],
+            isFakeSpec: isFakeSpec
+        )
+        if !transformationResult.classLevelDeclarations.isEmpty {
+            // preserve any comments that came alongside the function call
+            // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
+            // and a bunch of unwanted whitespace
+            transformationResult.classLevelDeclarations[0].leadingTrivia = functionCallExpr
+                .leadingTrivia! + transformationResult.classLevelDeclarations[0].leadingTrivia!
+        }
+        return transformationResult
     }
 
     // TODO: DRY up with transformItFunctionCallIntoClassLevelDeclaration
