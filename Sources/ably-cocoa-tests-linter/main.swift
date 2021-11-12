@@ -171,9 +171,9 @@ class TransformQuickSpecSubclass {
 
         let contentsInfo = createScopeMemberContentsInfo(functionBody.statements)
 
-        return transformScopeMemberBody(
+        return transformStatements(
             functionBody.statements,
-            scope: [ScopeMember(type: .spec, contentsInfo: contentsInfo)],
+            immediatelyInsideScope: [ScopeMember(type: .spec, contentsInfo: contentsInfo)],
             isFakeSpec: isFakeSpec
         )
     }
@@ -256,9 +256,9 @@ class TransformQuickSpecSubclass {
         var globalDeclarations: [DeclSyntax]
     }
 
-    private func transformScopeMemberBody(
+    private func transformStatements(
         _ statements: CodeBlockItemListSyntax,
-        scope: Scope,
+        immediatelyInsideScope scope: Scope,
         isFakeSpec: Bool /* TODO: this param needs improving */
     ) -> ClassMemberTransformationResult {
         // TODO: remove references to spec() here, and check they still apply
@@ -515,22 +515,17 @@ class TransformQuickSpecSubclass {
         let calledFunctionName = identifierExpression.identifier.text
 
         switch calledFunctionName {
-        case "it", "xit":
-            return ClassMemberTransformationResult(
-                classLevelDeclarations: [transformItFunctionCallIntoClassLevelDeclaration(
-                    functionCallExpr,
-                    scope: scope,
-                    skipped: calledFunctionName == "xit"
-                )],
-                globalDeclarations: []
-            )
+        case "it":
+            return transformItFunctionCall(functionCallExpr, insideScope: scope, skipped: false)
+        case "xit":
+            return transformItFunctionCall(functionCallExpr, insideScope: scope, skipped: true)
         case "describe", "xdescribe", "context", "xcontext":
             guard let trailingClosure = functionCallExpr.trailingClosure else {
                 // TODO: DRY up with `it`
                 preconditionFailure("Expected a trailing closure")
             }
 
-            let description = getFunctionArgument(functionCallExpr)
+            let description = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
 
             // do a preflight to fetch some info about the scope's contents - hasOwnBeforeEach, hasOwnAfterEach
             // TODO: why does this give fewer hasOwnBeforeEach than we have in the codebase? I'm sure we'll find out in time
@@ -542,9 +537,9 @@ class TransformQuickSpecSubclass {
                 contentsInfo: contentsInfo
             )
 
-            var transformationResult = transformScopeMemberBody(
+            var transformationResult = transformStatements(
                 trailingClosure.statements,
-                scope: scope + [scopeMember],
+                immediatelyInsideScope: scope + [scopeMember],
                 isFakeSpec: isFakeSpec
             )
             if !transformationResult.classLevelDeclarations.isEmpty {
@@ -567,15 +562,10 @@ class TransformQuickSpecSubclass {
             )
         default:
             if calledFunctionName.starts(with: "reusableTests") {
-                return ClassMemberTransformationResult(
-                    classLevelDeclarations: [
-                        transformReusableTestsFunctionCallIntoClassLevelDeclaration(
-                            functionCallExpr,
-                            calledFunctionName: calledFunctionName,
-                            scope: scope
-                        ),
-                    ],
-                    globalDeclarations: []
+                return transformReusableTestsFunctionCall(
+                    functionCallExpr,
+                    calledFunctionName: calledFunctionName,
+                    insideScope: scope
                 )
             }
 
@@ -588,40 +578,12 @@ class TransformQuickSpecSubclass {
         }
     }
 
-    // gets the argument for `it` / `describe` / `context` etc
-    private func getFunctionArgument(_ functionCallExpr: FunctionCallExprSyntax) -> String {
-        // TODO: update function name from `it` here
-
-        precondition(functionCallExpr.argumentList.count == 1, "`it` should only take one argument")
-
-        // OK, this is a ExprSyntax, how do I find out whether it's a string literal?
-        let argumentExpression = functionCallExpr.argumentList.first!.expression
-
-        guard let stringLiteralExpression = argumentExpression.as(StringLiteralExprSyntax.self)
-        else {
-            preconditionFailure(
-                "Expected the one argument to `it` to be a string literal describing the test"
-            )
-        }
-
-        precondition(
-            stringLiteralExpression.segments.count == 1,
-            "the argument to `it` I'm expecting to only have one segment"
-        )
-
-        let firstSegment = stringLiteralExpression.segments.first!
-        // TODO: is this okay? Wasn't sure how to keep drilling
-        let testDescription = firstSegment.firstToken!.text
-
-        return testDescription
-    }
-
     // TODO: DRY up with transformItFunctionCallIntoClassLevelDeclaration
-    private func transformReusableTestsFunctionCallIntoClassLevelDeclaration(
+    private func transformReusableTestsFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
         calledFunctionName: String,
-        scope: Scope
-    ) -> MemberDeclListItemSyntax {
+        insideScope scope: Scope
+    ) -> ClassMemberTransformationResult {
         // this reusableTests* function call gets turned into a method
         let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false)
             .outputFunctionName(inScope: scope)
@@ -716,20 +678,23 @@ class TransformQuickSpecSubclass {
         ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
             .withTrailingTrivia(functionCallExpr.trailingTrivia!)
 
-        return SyntaxFactory.makeMemberDeclListItem(
-            decl: DeclSyntax(testFunctionDeclaration),
-            semicolon: nil
+        return ClassMemberTransformationResult(
+            classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
+                decl: DeclSyntax(testFunctionDeclaration),
+                semicolon: nil
+            )],
+            globalDeclarations: []
         )
     }
 
-    private func transformItFunctionCallIntoClassLevelDeclaration(
+    private func transformItFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
-        scope: Scope,
+        insideScope scope: Scope,
         skipped: Bool
-    ) -> MemberDeclListItemSyntax {
+    ) -> ClassMemberTransformationResult {
         // `it` gets turned into a method
 
-        let testDescription = getFunctionArgument(functionCallExpr)
+        let testDescription = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
 
         let methodName = QuickSpecMethodCall.it(testDescription: testDescription, skipped: skipped)
             .outputFunctionName(inScope: scope)
@@ -829,9 +794,12 @@ class TransformQuickSpecSubclass {
         ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
             .withTrailingTrivia(functionCallExpr.trailingTrivia!)
 
-        return SyntaxFactory.makeMemberDeclListItem(
-            decl: DeclSyntax(testFunctionDeclaration),
-            semicolon: nil
+        return ClassMemberTransformationResult(
+            classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
+                decl: DeclSyntax(testFunctionDeclaration),
+                semicolon: nil
+            )],
+            globalDeclarations: []
         )
     }
 
@@ -1009,6 +977,38 @@ class TransformQuickSpecSubclass {
             // TODO: iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
 
             return (isSkipped || scope.isSkipped ? "skipped_" : "") + withoutWhitespace
+        }
+
+        // TODO: can probably integrate this better with the class
+        // gets the argument for `it` / `describe` / `context` etc
+        static func getFunctionArgument(_ functionCallExpr: FunctionCallExprSyntax) -> String {
+            // TODO: update function name from `it` here
+
+            precondition(
+                functionCallExpr.argumentList.count == 1,
+                "`it` should only take one argument"
+            )
+
+            // OK, this is a ExprSyntax, how do I find out whether it's a string literal?
+            let argumentExpression = functionCallExpr.argumentList.first!.expression
+
+            guard let stringLiteralExpression = argumentExpression.as(StringLiteralExprSyntax.self)
+            else {
+                preconditionFailure(
+                    "Expected the one argument to `it` to be a string literal describing the test"
+                )
+            }
+
+            precondition(
+                stringLiteralExpression.segments.count == 1,
+                "the argument to `it` I'm expecting to only have one segment"
+            )
+
+            let firstSegment = stringLiteralExpression.segments.first!
+            // TODO: is this okay? Wasn't sure how to keep drilling
+            let testDescription = firstSegment.firstToken!.text
+
+            return testDescription
         }
     }
 }
