@@ -309,16 +309,16 @@ class TransformQuickSpecSubclass {
         // We add a `context: (beforeEach: () -> (), afterEach: () -> ())` arg to all these functions
 
         var parameterList = decl.signature.input.parameterList
-        
+
         var hasTrailingClosure = false
 
         if !parameterList.isEmpty {
             let finalParam = parameterList.last!
-            
+
             let finalParamBaseType: TypeSyntax?
-            
+
             if let attributedType = finalParam.type?.as(AttributedTypeSyntax.self) {
-               finalParamBaseType = attributedType.baseType
+                finalParamBaseType = attributedType.baseType
             } else if let _ = finalParam.type?.as(SimpleTypeIdentifierSyntax.self) {
                 // we only care whether it's a closure and I suppose it's not
                 finalParamBaseType = nil
@@ -328,14 +328,18 @@ class TransformQuickSpecSubclass {
             } else {
                 preconditionFailure("I don't know how to handle \(finalParam.type!.syntaxNodeType)")
             }
-            
+
             hasTrailingClosure = finalParamBaseType?.is(FunctionTypeSyntax.self) == true
         }
-        
-        if (!hasTrailingClosure && !parameterList.isEmpty) || (hasTrailingClosure && parameterList.count > 1) {
+
+        if (!hasTrailingClosure && !parameterList.isEmpty) ||
+            (hasTrailingClosure && parameterList.count > 1)
+        {
             // This seems like a faff, no doubt I don't know enough about
             // Swift collections
-            let finalParam = parameterList[parameterList.index(parameterList.endIndex, offsetBy: (hasTrailingClosure ? -2 : -1))]
+            let finalParam =
+                parameterList[parameterList
+                    .index(parameterList.endIndex, offsetBy: hasTrailingClosure ? -2 : -1)]
 
             // Add trailing comma to final param (or penultimate if has trailing closure)
             var newFinalParam = finalParam
@@ -358,7 +362,10 @@ class TransformQuickSpecSubclass {
             defaultArgument: nil,
             trailingComma: hasTrailingClosure ? SyntaxFactory.makeCommaToken() : nil
         )
-        parameterList = parameterList.inserting(parameter, at: (hasTrailingClosure ? parameterList.count - 1 : parameterList.count))
+        parameterList = parameterList.inserting(
+            parameter,
+            at: hasTrailingClosure ? parameterList.count - 1 : parameterList.count
+        )
 
         var newDecl = decl
         newDecl.signature.input.parameterList = parameterList
@@ -448,6 +455,40 @@ class TransformQuickSpecSubclass {
         return transformationResult
     }
 
+    private func addContextToReusableTestsFunctionCall(_ functionCallExpr: FunctionCallExprSyntax)
+        -> FunctionCallExprSyntax
+    {
+        var newFunctionCallExpr = functionCallExpr
+
+        if newFunctionCallExpr.leftParen == nil {
+            // build parens if doesn't already have them (e.g. if function call has a trailing closure and no other args)
+            newFunctionCallExpr.leftParen = SyntaxFactory.makeLeftParenToken()
+            newFunctionCallExpr.rightParen = SyntaxFactory.makeRightParenToken()
+        }
+
+        // add a trailing comma to current final arg
+        var newArgumentList = newFunctionCallExpr.argumentList
+        if !newArgumentList.isEmpty {
+            let index = newArgumentList.index(newArgumentList.endIndex, offsetBy: -1)
+            var newArgument = newArgumentList[index]
+            newArgument = newArgument.withTrailingComma(SyntaxFactory.makeCommaToken())
+            newArgumentList = newArgumentList.replacing(
+                childAt: newArgumentList.count - 1,
+                with: newArgument
+            )
+            newFunctionCallExpr.argumentList = newArgumentList
+        }
+
+        newFunctionCallExpr = newFunctionCallExpr.addArgument(SyntaxFactory.makeTupleExprElement(
+            label: SyntaxFactory.makeIdentifier("context"),
+            colon: SyntaxFactory.makeColonToken(),
+            expression: ExprSyntax(SyntaxFactory
+                .makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword())),
+            trailingComma: nil
+        ))
+        return newFunctionCallExpr
+    }
+
     // TODO: DRY up with transformItFunctionCallIntoClassLevelDeclaration
     private func transformReusableTestsFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
@@ -458,8 +499,10 @@ class TransformQuickSpecSubclass {
         let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false)
             .outputFunctionName(inScope: scope)
 
+        let newFunctionCallExpr = addContextToReusableTestsFunctionCall(functionCallExpr)
+
         let codeBlockItem = SyntaxFactory.makeCodeBlockItem(
-            item: Syntax(functionCallExpr),
+            item: Syntax(newFunctionCallExpr),
             semicolon: nil,
             errorTokens: nil
         )
@@ -545,8 +588,8 @@ class TransformQuickSpecSubclass {
                 statements: newStatements,
                 rightBrace: SyntaxFactory.makeRightBraceToken()
             )
-        ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
-            .withTrailingTrivia(functionCallExpr.trailingTrivia!)
+        ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
+            .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
 
         return ClassMemberTransformationResult(
             classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
