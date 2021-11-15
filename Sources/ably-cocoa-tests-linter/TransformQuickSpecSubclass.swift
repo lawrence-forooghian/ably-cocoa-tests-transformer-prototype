@@ -235,6 +235,9 @@ class TransformQuickSpecSubclass {
                         .makeCodeBlockItemList(codeBlockItemsFromFunction +
                             testFunctionInvocationCodeBlockItems)
 
+                    newFunctionDeclaration =
+                        addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
+
                     return ClassMemberTransformationResult(
                         classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                             builder.useDecl(DeclSyntax(newFunctionDeclaration))
@@ -298,6 +301,69 @@ class TransformQuickSpecSubclass {
         }
 
         return memberDeclListItems
+    }
+
+    private func addingContextToReusableTestsFunctionDeclaration(_ decl: FunctionDeclSyntax)
+        -> FunctionDeclSyntax
+    {
+        // We add a `context: (beforeEach: () -> (), afterEach: () -> ())` arg to all these functions
+
+        var parameterList = decl.signature.input.parameterList
+        
+        var hasTrailingClosure = false
+
+        if !parameterList.isEmpty {
+            let finalParam = parameterList.last!
+            
+            let finalParamBaseType: TypeSyntax?
+            
+            if let attributedType = finalParam.type?.as(AttributedTypeSyntax.self) {
+               finalParamBaseType = attributedType.baseType
+            } else if let _ = finalParam.type?.as(SimpleTypeIdentifierSyntax.self) {
+                // we only care whether it's a closure and I suppose it's not
+                finalParamBaseType = nil
+            } else if let _ = finalParam.type?.as(TupleTypeSyntax.self) {
+                // we only care whether it's a closure and I suppose it's not
+                finalParamBaseType = nil
+            } else {
+                preconditionFailure("I don't know how to handle \(finalParam.type!.syntaxNodeType)")
+            }
+            
+            hasTrailingClosure = finalParamBaseType?.is(FunctionTypeSyntax.self) == true
+        }
+        
+        if (!hasTrailingClosure && !parameterList.isEmpty) || (hasTrailingClosure && parameterList.count > 1) {
+            // This seems like a faff, no doubt I don't know enough about
+            // Swift collections
+            let finalParam = parameterList[parameterList.index(parameterList.endIndex, offsetBy: (hasTrailingClosure ? -2 : -1))]
+
+            // Add trailing comma to final param (or penultimate if has trailing closure)
+            var newFinalParam = finalParam
+            newFinalParam = newFinalParam.withTrailingComma(SyntaxFactory.makeCommaToken())
+            parameterList = parameterList.replacing(
+                childAt: parameterList.count - (hasTrailingClosure ? 2 : 1),
+                with: newFinalParam
+            )
+        }
+
+        let parameterType = SyntaxFactory
+            .makeTypeIdentifier("(beforeEach: (() -> ())?, afterEach: (() -> ())?)")
+        let parameter = SyntaxFactory.makeFunctionParameter(
+            attributes: nil,
+            firstName: SyntaxFactory.makeIdentifier("context"),
+            secondName: nil,
+            colon: SyntaxFactory.makeColonToken(),
+            type: parameterType,
+            ellipsis: nil,
+            defaultArgument: nil,
+            trailingComma: hasTrailingClosure ? SyntaxFactory.makeCommaToken() : nil
+        )
+        parameterList = parameterList.inserting(parameter, at: (hasTrailingClosure ? parameterList.count - 1 : parameterList.count))
+
+        var newDecl = decl
+        newDecl.signature.input.parameterList = parameterList
+
+        return newDecl
     }
 
     private func transformFunctionCall(
