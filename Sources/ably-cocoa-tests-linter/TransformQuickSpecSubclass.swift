@@ -482,11 +482,19 @@ class TransformQuickSpecSubclass {
         newFunctionCallExpr = newFunctionCallExpr.addArgument(SyntaxFactory.makeTupleExprElement(
             label: SyntaxFactory.makeIdentifier("context"),
             colon: SyntaxFactory.makeColonToken(),
-            expression: ExprSyntax(SyntaxFactory
-                .makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword())),
+            expression: ExprSyntax(makeContextTupleExpr()),
             trailingComma: nil
         ))
         return newFunctionCallExpr
+    }
+    
+    private func makeContextTupleExpr() -> TupleExprSyntax {
+        let elementList = SyntaxFactory.makeTupleExprElementList([
+            SyntaxFactory.makeTupleExprElement(label: SyntaxFactory.makeIdentifier("beforeEach"), colon: SyntaxFactory.makeColonToken(), expression: ExprSyntax(SyntaxFactory.makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword())), trailingComma: SyntaxFactory.makeCommaToken()),
+            SyntaxFactory.makeTupleExprElement(label: SyntaxFactory.makeIdentifier("afterEach"), colon: SyntaxFactory.makeColonToken(), expression: ExprSyntax(SyntaxFactory.makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword())), trailingComma: nil)
+        ])
+            
+        return SyntaxFactory.makeTupleExpr(leftParen: SyntaxFactory.makeLeftParenToken(), elementList: elementList, rightParen: SyntaxFactory.makeRightParenToken())
     }
 
     // TODO: DRY up with transformItFunctionCallIntoClassLevelDeclaration
