@@ -729,7 +729,7 @@ class TransformQuickSpecSubclass {
                 }
                 
                 if scope.isReusableTests {
-                    let functionName = "context.beforeEach"
+                    let functionName = "context.beforeEach?"
                     
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
@@ -778,7 +778,7 @@ class TransformQuickSpecSubclass {
                 }
                 
                 if scope.isReusableTests {
-                    let functionName = "context.afterEach"
+                    let functionName = "context.afterEach?"
                     
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
