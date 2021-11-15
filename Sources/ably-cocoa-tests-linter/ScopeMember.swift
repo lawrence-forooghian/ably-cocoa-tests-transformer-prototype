@@ -3,11 +3,13 @@ import SwiftSyntax
 struct ScopeMember: CustomStringConvertible {
     enum ScopeMemberType: CustomStringConvertible {
         case spec
+        case reusableTests(functionName: String)
         case describeOrContext(description: String, skipped: Bool)
 
         var description: String {
             switch self {
             case .spec: return "spec()"
+            case let .reusableTests(functionName: functionName): return "reusableTests(\(functionName)"
             case let .describeOrContext(description: description): return "describeOrContext(\(description))"
             }
         }
@@ -117,6 +119,7 @@ struct ScopeMember: CustomStringConvertible {
     var methodNameComponent: String {
         switch type {
         case .spec: return ""
+        case .reusableTests: return ""
         case let .describeOrContext(description: description, skipped: _): return description
         }
     }

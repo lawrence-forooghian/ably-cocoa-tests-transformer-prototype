@@ -29,4 +29,14 @@ extension Array where Element == ScopeMember /* i.e. Scope */ {
         }
         return parent?.isSkipped ?? false
     }
+    
+    var isReusableTests: Bool {
+        contains { member in
+            if case .reusableTests = member.type {
+                return true
+            } else {
+                return false
+            }
+        }
+    }
 }

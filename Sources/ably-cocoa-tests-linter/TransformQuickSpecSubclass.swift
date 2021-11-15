@@ -68,12 +68,12 @@ class TransformQuickSpecSubclass {
             )
         }
 
-        return transformSpecOrReusableTestsFunctionDeclaration(specFunctionDecl, isReusableTests: false)
+        return transformSpecOrReusableTestsFunctionDeclaration(specFunctionDecl, createDefinedScope: { [ScopeMember(type: .spec, contentsInfo: $0)] })
     }
 
     private func transformSpecOrReusableTestsFunctionDeclaration(
         _ functionDeclaration: FunctionDeclSyntax,
-        isReusableTests: Bool
+        createDefinedScope: (ScopeMember.ContentsInfo) -> Scope
     ) -> ClassMemberTransformationResult {
         guard let functionBody = functionDeclaration.body else {
             fatalError("Don’t know how to handle function declaration without a body")
@@ -83,8 +83,7 @@ class TransformQuickSpecSubclass {
 
         return transformStatements(
             functionBody.statements,
-            immediatelyInsideScope: [ScopeMember(type: .spec, contentsInfo: contentsInfo)],
-            isReusableTests: isReusableTests
+            immediatelyInsideScope: createDefinedScope(contentsInfo)
         )
     }
 
@@ -95,8 +94,7 @@ class TransformQuickSpecSubclass {
 
     private func transformStatements(
         _ statements: CodeBlockItemListSyntax,
-        immediatelyInsideScope scope: Scope,
-        isReusableTests: Bool /* TODO: this param needs improving */
+        immediatelyInsideScope scope: Scope
     ) -> ClassMemberTransformationResult {
         // TODO: remove references to spec() here, and check they still apply
 
@@ -108,7 +106,7 @@ class TransformQuickSpecSubclass {
             // TODO: if we wanted to split up the different aspects of transformation (class level, global level) best would be to create some domain-specific AST-like thing and then do whatever we want with that afterwards
 
             if let variableDeclaration = VariableDeclSyntax(statement.item) {
-                if isReusableTests {
+                if scope.isReusableTests {
                     // it's not a function call's closure we're inside, it's a function body with local variables, which will remain a function, so can keep its variables intact
                     let decl = DeclSyntax(variableDeclaration)
                     return ClassMemberTransformationResult(
@@ -145,8 +143,7 @@ class TransformQuickSpecSubclass {
             } else if let functionCallExpr = FunctionCallExprSyntax(statement.item) {
                 return transformFunctionCall(
                     functionCallExpr,
-                    insideScope: scope,
-                    isReusableTests: isReusableTests
+                    insideScope: scope
                 )
             } else if let structDeclaration = StructDeclSyntax(statement.item) {
                 // Struct declarations just get hoisted outside of spec()
@@ -173,7 +170,8 @@ class TransformQuickSpecSubclass {
 
                     let declarations = transformSpecOrReusableTestsFunctionDeclaration(
                         functionDeclaration,
-                        isReusableTests: true
+                        // TODO is there ever a reason why might want to create a nested scope here? e.g. if we have a reusableTests function nested inside a reusableTests? It's academic, doesn't apply to ably-cocoa I'm 99.9% sure
+                        createDefinedScope: { [ScopeMember(type: .reusableTests(functionName: functionDeclaration.identifier.text), contentsInfo: $0)]}
                     ).classLevelDeclarations
 
                     // OK, we need to embed this inside a class
@@ -246,7 +244,7 @@ class TransformQuickSpecSubclass {
                     )
                 }
 
-                if isReusableTests {
+                if scope.isReusableTests {
                     // it's not a function call's closure we're inside, it's a function body with local functions, which will remain a function, so can keep its functions intact
                     // TODO: see if we actually have any of this in our codebase
                     let decl = DeclSyntax(functionDeclaration)
@@ -375,8 +373,7 @@ class TransformQuickSpecSubclass {
 
     private func transformFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
-        insideScope scope: Scope,
-        isReusableTests: Bool
+        insideScope scope: Scope
     ) -> ClassMemberTransformationResult {
         guard let identifierExpression =
             IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))
@@ -396,14 +393,12 @@ class TransformQuickSpecSubclass {
             return transformDescribeOrContextFunctionCall(
                 functionCallExpr,
                 insideScope: scope,
-                skipped: calledFunctionName.starts(with: "x"),
-                isReusableTests: isReusableTests
+                skipped: calledFunctionName.starts(with: "x")
             )
         case "beforeEach", "afterEach":
             return transformBeforeOrAfterEachFunctionCall(
                 functionCallExpr,
-                insideScope: scope,
-                isReusableTests: isReusableTests
+                insideScope: scope
             )
         default:
             if calledFunctionName.starts(with: "reusableTests") {
@@ -421,8 +416,7 @@ class TransformQuickSpecSubclass {
     private func transformDescribeOrContextFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
         insideScope scope: Scope,
-        skipped: Bool,
-        isReusableTests: Bool
+        skipped: Bool
     ) -> ClassMemberTransformationResult {
         guard let trailingClosure = functionCallExpr.trailingClosure else {
             // TODO: DRY up with `it`
@@ -443,8 +437,7 @@ class TransformQuickSpecSubclass {
 
         var transformationResult = transformStatements(
             trailingClosure.statements,
-            immediatelyInsideScope: scope + [scopeMember],
-            isReusableTests: isReusableTests
+            immediatelyInsideScope: scope + [scopeMember]
         )
         if !transformationResult.classLevelDeclarations.isEmpty {
             // preserve any comments that came alongside the function call
@@ -686,8 +679,7 @@ class TransformQuickSpecSubclass {
 
     private func transformBeforeOrAfterEachFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
-        insideScope scope: Scope,
-        isReusableTests: Bool
+        insideScope scope: Scope
     ) -> ClassMemberTransformationResult {
         // `beforeEach` or `afterEach` gets turned into a method
 
@@ -736,7 +728,7 @@ class TransformQuickSpecSubclass {
                     ))
                 }
                 
-                if isReusableTests {
+                if scope.isReusableTests {
                     let functionName = "context.beforeEach"
                     
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
@@ -785,7 +777,7 @@ class TransformQuickSpecSubclass {
                     ))
                 }
                 
-                if isReusableTests {
+                if scope.isReusableTests {
                     let functionName = "context.afterEach"
                     
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
