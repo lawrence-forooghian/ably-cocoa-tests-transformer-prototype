@@ -56,10 +56,10 @@ class TransformQuickSpecSubclass {
         else {
             if let variableDeclaration = member.decl.as(VariableDeclSyntax.self) {
                 print(
-                    "TODO check that the class variable declaration \(variableDeclaration) doesn't shadow our newly-created global variables"
+                    "\tTODO check that the class variable declaration \(variableDeclaration) doesn't shadow our newly-created global variables"
                 )
                 print(
-                    "TODO check that there isn't a variable called `name` because that will be shadowed by an XCTestCase method"
+                    "\tTODO check that there isn't a variable called `name` because that will be shadowed by an XCTestCase method"
                 )
             }
             return ClassMemberTransformationResult(
@@ -166,10 +166,6 @@ class TransformQuickSpecSubclass {
                 if functionDeclaration.identifier.text.starts(with: "reusableTests") {
                     // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
                     // but we preserve the containing function and make it also invoke all of the test cases
-
-                    print(
-                        "\tTODO handle \(functionDeclaration.identifier.text) distinctly from `spec` – we need a scope,  we need to handle before/afterEach, and we need to decide whether it should be a global function or class (consistency would mean global, but it's worse for reviewing)"
-                    )
 
                     let declarations = transformSpecOrReusableTestsFunctionDeclaration(
                         functionDeclaration,
