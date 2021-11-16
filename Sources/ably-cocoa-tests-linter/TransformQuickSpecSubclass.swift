@@ -68,7 +68,10 @@ class TransformQuickSpecSubclass {
             )
         }
 
-        return transformSpecOrReusableTestsFunctionDeclaration(specFunctionDecl, createDefinedScope: { [ScopeMember(type: .spec, contentsInfo: $0)] })
+        return transformSpecOrReusableTestsFunctionDeclaration(
+            specFunctionDecl,
+            createDefinedScope: { [ScopeMember(type: .spec, contentsInfo: $0)] }
+        )
     }
 
     private func transformSpecOrReusableTestsFunctionDeclaration(
@@ -170,8 +173,11 @@ class TransformQuickSpecSubclass {
 
                     let declarations = transformSpecOrReusableTestsFunctionDeclaration(
                         functionDeclaration,
-                        // TODO is there ever a reason why might want to create a nested scope here? e.g. if we have a reusableTests function nested inside a reusableTests? It's academic, doesn't apply to ably-cocoa I'm 99.9% sure
-                        createDefinedScope: { [ScopeMember(type: .reusableTests(functionName: functionDeclaration.identifier.text), contentsInfo: $0)]}
+                        // TODO: is there ever a reason why might want to create a nested scope here? e.g. if we have a reusableTests function nested inside a reusableTests? It's academic, doesn't apply to ably-cocoa I'm 99.9% sure
+                        createDefinedScope: { [ScopeMember(
+                            type: .reusableTests(functionName: functionDeclaration.identifier.text),
+                            contentsInfo: $0
+                        )] }
                     ).classLevelDeclarations
 
                     // OK, we need to embed this inside a class
@@ -449,7 +455,10 @@ class TransformQuickSpecSubclass {
         return transformationResult
     }
 
-    private func addContextToReusableTestsFunctionCall(_ functionCallExpr: FunctionCallExprSyntax, insideScope scope: Scope)
+    private func addContextToReusableTestsFunctionCall(
+        _ functionCallExpr: FunctionCallExprSyntax,
+        insideScope scope: Scope
+    )
         -> FunctionCallExprSyntax
     {
         var newFunctionCallExpr = functionCallExpr
@@ -481,30 +490,56 @@ class TransformQuickSpecSubclass {
         ))
         return newFunctionCallExpr
     }
-    
+
     private func makeContextTupleExpr(insideScope scope: Scope) -> TupleExprSyntax {
         let beforeEachExpr: ExprSyntax
-        if let nearestAncestorHavingOwnBeforeEach = scope.nearestAncestorHavingOwnBeforeEach(includeSelf: true) {
-            let functionName = QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: nearestAncestorHavingOwnBeforeEach)
-            beforeEachExpr = ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeIdentifier(functionName), declNameArguments: nil))
+        if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
+            ofType: .beforeEach,
+            includeSelf: true
+        ) {
+            beforeEachExpr = ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                identifier: SyntaxFactory.makeIdentifier(hookSource.outputFunctionName),
+                declNameArguments: nil
+            ))
         } else {
-            beforeEachExpr = ExprSyntax(SyntaxFactory.makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword()))
+            beforeEachExpr = ExprSyntax(SyntaxFactory
+                .makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword()))
         }
-        
+
         let afterEachExpr: ExprSyntax
-        if let nearestAncestorHavingOwnAfterEach = scope.nearestAncestorHavingOwnAfterEach(includeSelf: true) {
-            let functionName = QuickSpecMethodCall.afterEach.outputFunctionName(inScope: nearestAncestorHavingOwnAfterEach)
-            afterEachExpr = ExprSyntax(SyntaxFactory.makeIdentifierExpr(identifier: SyntaxFactory.makeIdentifier(functionName), declNameArguments: nil))
+        if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
+            ofType: .afterEach,
+            includeSelf: true
+        ) {
+            afterEachExpr = ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                identifier: SyntaxFactory.makeIdentifier(hookSource.outputFunctionName),
+                declNameArguments: nil
+            ))
         } else {
-            afterEachExpr = ExprSyntax(SyntaxFactory.makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword()))
+            afterEachExpr = ExprSyntax(SyntaxFactory
+                .makeNilLiteralExpr(nilKeyword: SyntaxFactory.makeNilKeyword()))
         }
-        
+
         let elementList = SyntaxFactory.makeTupleExprElementList([
-            SyntaxFactory.makeTupleExprElement(label: SyntaxFactory.makeIdentifier("beforeEach"), colon: SyntaxFactory.makeColonToken(), expression: beforeEachExpr, trailingComma: SyntaxFactory.makeCommaToken()),
-            SyntaxFactory.makeTupleExprElement(label: SyntaxFactory.makeIdentifier("afterEach"), colon: SyntaxFactory.makeColonToken(), expression: afterEachExpr, trailingComma: nil)
+            SyntaxFactory.makeTupleExprElement(
+                label: SyntaxFactory.makeIdentifier("beforeEach"),
+                colon: SyntaxFactory.makeColonToken(),
+                expression: beforeEachExpr,
+                trailingComma: SyntaxFactory.makeCommaToken()
+            ),
+            SyntaxFactory.makeTupleExprElement(
+                label: SyntaxFactory.makeIdentifier("afterEach"),
+                colon: SyntaxFactory.makeColonToken(),
+                expression: afterEachExpr,
+                trailingComma: nil
+            ),
         ])
-            
-        return SyntaxFactory.makeTupleExpr(leftParen: SyntaxFactory.makeLeftParenToken(), elementList: elementList, rightParen: SyntaxFactory.makeRightParenToken())
+
+        return SyntaxFactory.makeTupleExpr(
+            leftParen: SyntaxFactory.makeLeftParenToken(),
+            elementList: elementList,
+            rightParen: SyntaxFactory.makeRightParenToken()
+        )
     }
 
     // TODO: DRY up with transformItFunctionCallIntoClassLevelDeclaration
@@ -517,7 +552,10 @@ class TransformQuickSpecSubclass {
         let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false)
             .outputFunctionName(inScope: scope)
 
-        let newFunctionCallExpr = addContextToReusableTestsFunctionCall(functionCallExpr, insideScope: scope)
+        let newFunctionCallExpr = addContextToReusableTestsFunctionCall(
+            functionCallExpr,
+            insideScope: scope
+        )
 
         let codeBlockItem = SyntaxFactory.makeCodeBlockItem(
             item: Syntax(newFunctionCallExpr),
@@ -592,15 +630,17 @@ class TransformQuickSpecSubclass {
             // TODO: DRY these up with the beforeEach / afterEach ancestor-calling code
 
             // beforeEach
-            if let nearestScopeHavingOwnBeforeEach = scope
-                .nearestAncestorHavingOwnBeforeEach(includeSelf: true)
-            {
-                let functionName = QuickSpecMethodCall.beforeEach
-                    .outputFunctionName(inScope: nearestScopeHavingOwnBeforeEach)
+            if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
+                ofType: .beforeEach,
+                includeSelf: true
+            ) {
                 let functionCall = SyntaxFactory.makeFunctionCallExpr(
                     calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                         identifier: SyntaxFactory
-                            .makeToken(.identifier(functionName), presence: .present),
+                            .makeToken(
+                                .identifier(hookSource.outputFunctionName),
+                                presence: .present
+                            ),
                         declNameArguments: nil
                     )),
                     leftParen: SyntaxFactory.makeLeftParenToken(),
@@ -616,15 +656,17 @@ class TransformQuickSpecSubclass {
             }
 
             // afterEach
-            if let nearestScopeHavingOwnAfterEach = scope
-                .nearestAncestorHavingOwnAfterEach(includeSelf: true)
-            {
-                let functionName = QuickSpecMethodCall.afterEach
-                    .outputFunctionName(inScope: nearestScopeHavingOwnAfterEach)
+            if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
+                ofType: .afterEach,
+                includeSelf: true
+            ) {
                 let functionCall = SyntaxFactory.makeFunctionCallExpr(
                     calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                         identifier: SyntaxFactory
-                            .makeToken(.identifier(functionName), presence: .present),
+                            .makeToken(
+                                .identifier(hookSource.outputFunctionName),
+                                presence: .present
+                            ),
                         declNameArguments: nil
                     )),
                     leftParen: SyntaxFactory.makeLeftParenToken(),
@@ -705,14 +747,18 @@ class TransformQuickSpecSubclass {
             // TODO: double-check the ordering of the before / after in relation to parents
             case .beforeEach:
                 var newStatements: CodeBlockItemListSyntax = trailingClosure.statements
-                
-                if let nearest = scope.nearestAncestorHavingOwnBeforeEach(includeSelf: false) {
-                    let ancestorFunctionName = QuickSpecMethodCall.beforeEach
-                        .outputFunctionName(inScope: nearest)
+
+                if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
+                    ofType: .beforeEach,
+                    includeSelf: false
+                ) {
                     let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                             identifier: SyntaxFactory
-                                .makeToken(.identifier(ancestorFunctionName), presence: .present),
+                                .makeToken(
+                                    .identifier(hookSource.outputFunctionName),
+                                    presence: .present
+                                ),
                             declNameArguments: nil
                         )),
                         leftParen: SyntaxFactory.makeLeftParenToken(),
@@ -727,10 +773,10 @@ class TransformQuickSpecSubclass {
                         errorTokens: nil
                     ))
                 }
-                
+
                 if scope.isReusableTests {
                     let functionName = "context.beforeEach?"
-                    
+
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                             identifier: SyntaxFactory
@@ -743,25 +789,29 @@ class TransformQuickSpecSubclass {
                         trailingClosure: nil,
                         additionalTrailingClosures: nil
                     ).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
-                    
+
                     newStatements = newStatements.prepending(SyntaxFactory.makeCodeBlockItem(
                         item: Syntax(contextFunctionCall),
                         semicolon: nil,
                         errorTokens: nil
                     ))
                 }
-                
+
                 return newStatements
             case .afterEach:
                 var newStatements: CodeBlockItemListSyntax = trailingClosure.statements
-                
-                if let nearest = scope.nearestAncestorHavingOwnAfterEach(includeSelf: false) {
-                    let ancestorFunctionName = QuickSpecMethodCall.afterEach
-                        .outputFunctionName(inScope: nearest)
+
+                if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
+                    ofType: .afterEach,
+                    includeSelf: false
+                ) {
                     let ancestorFunctionCall = SyntaxFactory.makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                             identifier: SyntaxFactory
-                                .makeToken(.identifier(ancestorFunctionName), presence: .present),
+                                .makeToken(
+                                    .identifier(hookSource.outputFunctionName),
+                                    presence: .present
+                                ),
                             declNameArguments: nil
                         )),
                         leftParen: SyntaxFactory.makeLeftParenToken(),
@@ -770,16 +820,17 @@ class TransformQuickSpecSubclass {
                         trailingClosure: nil,
                         additionalTrailingClosures: nil
                     ).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
-                    newStatements = trailingClosure.statements.appending(SyntaxFactory.makeCodeBlockItem(
-                        item: Syntax(ancestorFunctionCall),
-                        semicolon: nil,
-                        errorTokens: nil
-                    ))
+                    newStatements = trailingClosure.statements
+                        .appending(SyntaxFactory.makeCodeBlockItem(
+                            item: Syntax(ancestorFunctionCall),
+                            semicolon: nil,
+                            errorTokens: nil
+                        ))
                 }
-                
+
                 if scope.isReusableTests {
                     let functionName = "context.afterEach?"
-                    
+
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                             identifier: SyntaxFactory
@@ -792,14 +843,14 @@ class TransformQuickSpecSubclass {
                         trailingClosure: nil,
                         additionalTrailingClosures: nil
                     ).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
-                    
+
                     newStatements = newStatements.appending(SyntaxFactory.makeCodeBlockItem(
                         item: Syntax(contextFunctionCall),
                         semicolon: nil,
                         errorTokens: nil
                     ))
                 }
-                
+
                 return newStatements
             default: fatalError("unexpected methodCall")
             }

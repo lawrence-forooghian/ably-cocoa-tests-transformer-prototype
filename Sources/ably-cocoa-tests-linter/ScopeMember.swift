@@ -1,7 +1,7 @@
 import SwiftSyntax
 
 struct ScopeMember: CustomStringConvertible {
-    enum ScopeMemberType: CustomStringConvertible {
+    enum `Type`: CustomStringConvertible {
         case spec
         case reusableTests(functionName: String)
         case describeOrContext(description: String, skipped: Bool)
@@ -113,7 +113,7 @@ struct ScopeMember: CustomStringConvertible {
         }
     }
 
-    var type: ScopeMemberType
+    var type: `Type`
     var contentsInfo: ContentsInfo
 
     var methodNameComponent: String {
@@ -131,5 +131,20 @@ struct ScopeMember: CustomStringConvertible {
             (contentsInfo.variableDefinitions
                 .isEmpty ? "" : " variableDefinitions: \(contentsInfo.variableDefinitions)") +
             ">"
+    }
+
+    func ownHookSourceType(ofType hookType: HookType) -> HookSource.`Type`? {
+        switch hookType {
+        case .beforeEach:
+            if contentsInfo.hasOwnBeforeEach { return .quickSpecMethodCall }
+        case .afterEach:
+            if contentsInfo.hasOwnAfterEach { return .quickSpecMethodCall }
+        }
+
+        if case .reusableTests = type {
+            return .contextArg
+        }
+
+        return nil
     }
 }

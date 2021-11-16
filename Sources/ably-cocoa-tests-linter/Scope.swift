@@ -9,18 +9,16 @@ extension Array where Element == ScopeMember /* i.e. Scope */ {
         return new
     }
 
-    func nearestAncestorHavingOwnBeforeEach(includeSelf: Bool) -> Self? {
-        if includeSelf, last!.contentsInfo.hasOwnBeforeEach {
-            return self
+    func hookSourceOfNearestAncestorHavingOwnHookSource(ofType hookType: HookType,
+                                                        includeSelf: Bool) -> HookSource?
+    {
+        if includeSelf, let hookSourceType = last!.ownHookSourceType(ofType: hookType) {
+            return HookSource(scope: self, type: hookSourceType, hookType: hookType)
         }
-        return parent?.nearestAncestorHavingOwnBeforeEach(includeSelf: true)
-    }
-
-    func nearestAncestorHavingOwnAfterEach(includeSelf: Bool) -> Self? {
-        if includeSelf, last!.contentsInfo.hasOwnAfterEach {
-            return self
-        }
-        return parent?.nearestAncestorHavingOwnAfterEach(includeSelf: true)
+        return parent?.hookSourceOfNearestAncestorHavingOwnHookSource(
+            ofType: hookType,
+            includeSelf: true
+        )
     }
 
     var isSkipped: Bool {
@@ -29,7 +27,7 @@ extension Array where Element == ScopeMember /* i.e. Scope */ {
         }
         return parent?.isSkipped ?? false
     }
-    
+
     var isReusableTests: Bool {
         contains { member in
             if case .reusableTests = member.type {
