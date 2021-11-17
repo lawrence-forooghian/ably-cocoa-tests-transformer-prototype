@@ -1,52 +1,50 @@
 import SwiftSyntax
 
-class ASTTransform {
+enum ASTTransform {
     struct ClassTransformationResult {
         var globalDeclarations: [DeclSyntax]
-        var classContents: ClassContents
+        var classDeclaration: AST.ClassDeclaration
     }
 
-    static func transformClassContents(_ classContents: ClassContents)
+    static func transformClassDeclaration(_ classDeclaration: AST.ClassDeclaration)
         -> ClassTransformationResult
     {
-        let transformationResults = classContents.contents.map(transformClassContentsItem)
+        let transformationResults = classDeclaration.items.map(transformClassDeclarationItem)
 
         return ClassTransformationResult(
             globalDeclarations: transformationResults.flatMap(\.globalDeclarations),
-            classContents: ClassContents(contents: transformationResults.flatMap(\.classContents))
+            classDeclaration: classDeclaration
+                .replacingItems(transformationResults.flatMap(\.classDeclarationItems))
         )
     }
 
     struct ItemTransformationResult {
         var globalDeclarations: [DeclSyntax]
-        var classContents: [ClassContents.Item]
+        var classDeclarationItems: [AST.ClassDeclaration.Item]
+
+        init(classDeclarationItem: AST.ClassDeclaration.Item) {
+            globalDeclarations = []
+            classDeclarationItems = [classDeclarationItem]
+        }
     }
 
-    private static func transformClassContentsItem(_ item: ClassContents.Item)
+    private static func transformClassDeclarationItem(_ item: AST.ClassDeclaration.Item)
         -> ItemTransformationResult
     {
-        return ItemTransformationResult(globalDeclarations: [], classContents: [item])
         // I think the only class-level thing we want to manipulate is the `spec` function – everything else
         // we can pass through
 
-        // TODO: get this working
-
-        /*
-         switch item {
-         case let .scope(scope) where case .spec = scope.type:
-             let transformed = transformScope(scope)
-         // TODO: what do I return here
-         default:
-             return ClassContentsItemTransformationResult(globalDeclarations: [], items: [item])
-         }
-          */
+        switch item {
+        case let .member(member): return ItemTransformationResult(classDeclarationItem: item)
+        case let .spec(spec): return foo()
+        }
     }
 
     /*
      private static func transformSpecOrReusableTestsFunctionDeclaration(
          _ functionDeclaration: FunctionDeclSyntax,
          createDefinedScope: (ScopeMember.ContentsInfo) -> Scope
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          guard let functionBody = functionDeclaration.body else {
              fatalError("Don’t know how to handle function declaration without a body")
          }
@@ -62,10 +60,10 @@ class ASTTransform {
      private static func transformStatements(
          _ statements: CodeBlockItemListSyntax,
          immediatelyInsideScope scope: Scope
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          // TODO: remove references to spec() here, and check they still apply
 
-         let memberDeclListItems = statements.map { statement -> SyntaxTransformationResult in
+         let memberDeclListItems = statements.map { statement -> ItemTransformationResult in
              // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
              // TODO: what if there's stuff that clashes?
@@ -76,7 +74,7 @@ class ASTTransform {
                  if scope.isReusableTests {
                      // it's not a function call's closure we're inside, it's a function body with local variables, which will remain a function, so can keep its variables intact
                      let decl = DeclSyntax(variableDeclaration)
-                     return SyntaxTransformationResult(
+                     return ItemTransformationResult(
                          classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                              builder.useDecl(decl)
                          }],
@@ -103,7 +101,7 @@ class ASTTransform {
                  modifiedToPrivateVariableDeclaration = modifiedToPrivateVariableDeclaration
                      .withModifiers(newModifiers)
 
-                 return SyntaxTransformationResult(
+                 return ItemTransformationResult(
                      classLevelDeclarations: [],
                      globalDeclarations: [DeclSyntax(modifiedToPrivateVariableDeclaration)]
                  )
@@ -117,7 +115,7 @@ class ASTTransform {
                  // We only have one of these
 
                  let decl = DeclSyntax(structDeclaration)
-                 return SyntaxTransformationResult(
+                 return ItemTransformationResult(
                      classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                          builder.useDecl(decl)
                      }],
@@ -202,7 +200,7 @@ class ASTTransform {
                      newFunctionDeclaration =
                          addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
 
-                     return SyntaxTransformationResult(
+                     return ItemTransformationResult(
                          classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                              builder.useDecl(DeclSyntax(newFunctionDeclaration))
                          }],
@@ -214,7 +212,7 @@ class ASTTransform {
                      // it's not a function call's closure we're inside, it's a function body with local functions, which will remain a function, so can keep its functions intact
                      // TODO: see if we actually have any of this in our codebase
                      let decl = DeclSyntax(functionDeclaration)
-                     return SyntaxTransformationResult(
+                     return ItemTransformationResult(
                          classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                              builder.useDecl(decl)
                          }],
@@ -242,23 +240,23 @@ class ASTTransform {
                  modifiedToPrivateFunctionDeclaration = modifiedToPrivateFunctionDeclaration
                      .withModifiers(newModifiers)
 
-                 return SyntaxTransformationResult(
+                 return ItemTransformationResult(
                      classLevelDeclarations: [],
                      globalDeclarations: [DeclSyntax(modifiedToPrivateFunctionDeclaration)]
                  )
              } else {
                  print("\tTODO handle \(scope)-level \(statement.item)")
-                 return SyntaxTransformationResult(
+                 return ItemTransformationResult(
                      classLevelDeclarations: [],
                      globalDeclarations: []
                  )
              }
          }
-         .reduce(SyntaxTransformationResult(classLevelDeclarations: [],
+         .reduce(ItemTransformationResult(classLevelDeclarations: [],
                                             globalDeclarations: [
                                             ]) /* TODO: an `empty` method */ ) { accum, val in
              // TODO: from a Swifty point of view it would be nice to define a `+` here
-             SyntaxTransformationResult(
+             ItemTransformationResult(
                  classLevelDeclarations: accum.classLevelDeclarations + val.classLevelDeclarations,
                  globalDeclarations: accum.globalDeclarations + val.globalDeclarations
              )
@@ -340,7 +338,7 @@ class ASTTransform {
      private static func transformFunctionCall(
          _ functionCallExpr: FunctionCallExprSyntax,
          insideScope scope: Scope
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          guard let identifierExpression =
              IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))
          else {
@@ -383,7 +381,7 @@ class ASTTransform {
          _ functionCallExpr: FunctionCallExprSyntax,
          insideScope scope: Scope,
          skipped: Bool
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          guard let trailingClosure = functionCallExpr.trailingClosure else {
              // TODO: DRY up with `it`
              preconditionFailure("Expected a trailing closure")
@@ -507,7 +505,7 @@ class ASTTransform {
          _ functionCallExpr: FunctionCallExprSyntax,
          calledFunctionName: String,
          insideScope scope: Scope
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          // this reusableTests* function call gets turned into a method
          let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false)
              .outputFunctionName(inScope: scope)
@@ -550,7 +548,7 @@ class ASTTransform {
          ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
              .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
 
-         return SyntaxTransformationResult(
+         return ItemTransformationResult(
              classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
                  decl: DeclSyntax(testFunctionDeclaration),
                  semicolon: nil
@@ -563,7 +561,7 @@ class ASTTransform {
          _ functionCallExpr: FunctionCallExprSyntax,
          insideScope scope: Scope,
          skipped: Bool
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          // `it` gets turned into a method
 
          let testDescription = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
@@ -670,7 +668,7 @@ class ASTTransform {
          ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
              .withTrailingTrivia(functionCallExpr.trailingTrivia!)
 
-         return SyntaxTransformationResult(
+         return ItemTransformationResult(
              classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
                  decl: DeclSyntax(testFunctionDeclaration),
                  semicolon: nil
@@ -682,7 +680,7 @@ class ASTTransform {
      private static func transformBeforeOrAfterEachFunctionCall(
          _ functionCallExpr: FunctionCallExprSyntax,
          insideScope scope: Scope
-     ) -> SyntaxTransformationResult {
+     ) -> ItemTransformationResult {
          // `beforeEach` or `afterEach` gets turned into a method
 
          let methodCall = QuickSpecMethodCall(functionCallExpr: functionCallExpr)
@@ -844,7 +842,7 @@ class ASTTransform {
          ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
              .withTrailingTrivia(functionCallExpr.trailingTrivia!)
 
-         return SyntaxTransformationResult(
+         return ItemTransformationResult(
              classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
                  decl: DeclSyntax(testFunctionDeclaration),
                  semicolon: nil
@@ -852,5 +850,5 @@ class ASTTransform {
              globalDeclarations: []
          )
      }
-      */
+     */
 }

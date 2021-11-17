@@ -1,13 +1,16 @@
 import SwiftSyntax
 
-class ASTParser {
-    static func parseClassDeclaration(_ classDeclaration: ClassDeclSyntax) -> ClassContents {
-        return ClassContents(contents: classDeclaration.members.members.map { member in
-            parseClassMember(member)
-        })
+enum ASTParser {
+    static func parseClassDeclaration(_ classDeclaration: ClassDeclSyntax) -> AST.ClassDeclaration {
+        return AST.ClassDeclaration(
+            syntax: classDeclaration,
+            items: classDeclaration.members.members.map { member in
+                parseClassMember(member)
+            }
+        )
     }
 
-    private static func parseClassMember(_ member: MemberDeclListItemSyntax) -> ClassContents
+    private static func parseClassMember(_ member: MemberDeclListItemSyntax) -> AST.ClassDeclaration
         .Item
     {
         guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self),
@@ -20,12 +23,12 @@ class ASTParser {
             specFunctionDecl
         )
 
-        return .scope(ASTScope(type: .spec(specFunctionDecl), contents: contents))
+        return .spec(.init(syntax: member, contents: contents))
     }
 
     private static func parseSpecOrReusableTestsFunctionDeclaration(
         _ functionDeclaration: FunctionDeclSyntax
-    ) -> [ASTScope.Item] {
+    ) -> [AST.Scope.Item] {
         guard let functionBody = functionDeclaration.body else {
             fatalError("Don’t know how to handle function declaration without a body")
         }
@@ -37,8 +40,8 @@ class ASTParser {
 
     private static func parseStatements(
         _ statements: CodeBlockItemListSyntax
-    ) -> [ASTScope.Item] {
-        return statements.map { statement -> ASTScope.Item in
+    ) -> [AST.Scope.Item] {
+        return statements.map { statement -> AST.Scope.Item in
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
             // TODO: what if there's stuff that clashes?
@@ -55,14 +58,11 @@ class ASTParser {
                 // TODO: let's emit a warning when this returns no test cases? probably means we unrolled a loop incorrectly
                 if functionDeclaration.identifier.text.starts(with: "reusableTests") {
                     let contents = parseSpecOrReusableTestsFunctionDeclaration(functionDeclaration)
-                    let scope = ASTScope(
-                        type: .reusableTests(
-                            functionDeclaration,
-                            functionName: functionDeclaration.identifier.text
-                        ),
+                    return .reusableTests(.init(
+                        syntax: functionDeclaration,
+                        functionName: functionDeclaration.identifier.text,
                         contents: contents
-                    )
-                    return .scope(scope)
+                    ))
                 }
 
                 return .functionDeclaration(functionDeclaration)
@@ -75,7 +75,7 @@ class ASTParser {
 
     private static func parseFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax
-    ) -> ASTScope.Item {
+    ) -> AST.Scope.Item {
         guard let identifierExpression =
             IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))
         else {
@@ -112,7 +112,7 @@ class ASTParser {
     private static func parseDescribeOrContextFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
         skipped: Bool
-    ) -> ASTScope.Item {
+    ) -> AST.Scope.Item {
         guard let trailingClosure = functionCallExpr.trailingClosure else {
             // TODO: DRY up with `it`
             preconditionFailure("Expected a trailing closure")
@@ -121,15 +121,14 @@ class ASTParser {
         let description = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
 
         let contents = parseStatements(trailingClosure.statements)
-        return .scope(ASTScope(type: .describeOrContext(functionCallExpr, description: description,
-                                                        skipped: skipped),
-                               contents: contents))
+        return .describeOrContext(.init(syntax: functionCallExpr, description: description,
+                                        skipped: skipped, contents: contents))
     }
 
     private static func parseItFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
         skipped: Bool
-    ) -> ASTScope.Item {
+    ) -> AST.Scope.Item {
         let testDescription = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
         return .it(functionCallExpr, description: testDescription, skipped: skipped)
     }

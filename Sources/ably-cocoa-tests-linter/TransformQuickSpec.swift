@@ -80,7 +80,7 @@ class TransformQuickSpec: SyntaxRewriter {
                         .makeCodeBlockItem(item: Syntax(decl), semicolon: nil, errorTokens: nil)
                 },
             [SyntaxFactory.makeCodeBlockItem(
-                item: Syntax(transformed.classDecl),
+                item: Syntax(transformed.classDeclaration.syntax),
                 semicolon: nil,
                 errorTokens: nil
             )],
