@@ -2,8 +2,7 @@ import Foundation
 import SwiftSyntax
 
 enum QuickSpecMethodCall {
-    case beforeEach
-    case afterEach
+    case hook(_: HookType)
     case it(testDescription: String, skipped: Bool)
 
     private var isSkipped: Bool {
@@ -16,8 +15,8 @@ enum QuickSpecMethodCall {
 
     private var description: String {
         switch self {
-        case .beforeEach: return "beforeEach"
-        case .afterEach: return "afterEach"
+        case .hook(.beforeEach): return "beforeEach"
+        case .hook(.afterEach): return "afterEach"
         case let .it(testDescription: testDescription, skipped: _): return testDescription
         }
     }
@@ -35,8 +34,8 @@ enum QuickSpecMethodCall {
             IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))!
 
         switch identifierExpression.identifier.text {
-        case "beforeEach": self = .beforeEach
-        case "afterEach": self = .afterEach
+        case "beforeEach": self = .hook(.beforeEach)
+        case "afterEach": self = .hook(.afterEach)
         default: fatalError("this initializer isn't ready for other function names yet")
         }
     }
@@ -44,8 +43,8 @@ enum QuickSpecMethodCall {
     func outputFunctionName(inScope scope: Scope) -> String {
         let unsanitisedComponents: [String] = {
             switch self {
-            case .beforeEach,
-                 .afterEach: return [description] + scope.map { $0.methodNameComponent }
+            case .hook(.beforeEach),
+                 .hook(.afterEach): return [description] + scope.map { $0.methodNameComponent }
             case .it: return scope.map { $0.methodNameComponent } + [description]
             }
         }()

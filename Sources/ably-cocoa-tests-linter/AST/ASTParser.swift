@@ -3,15 +3,19 @@ import SwiftSyntax
 class ASTParser {
     static func parseClassDeclaration(_ classDeclaration: ClassDeclSyntax) -> ClassContents {
         return ClassContents(contents: classDeclaration.members.members.map { member in
-            return parseClassMember(member)
+            parseClassMember(member)
         })
     }
-    
-    private static func parseClassMember(_ member: MemberDeclListItemSyntax) -> ClassContents.`Type` {
-        guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self), specFunctionDecl.identifier.text == "spec" else {
+
+    private static func parseClassMember(_ member: MemberDeclListItemSyntax) -> ClassContents
+        .`Type`
+    {
+        guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self),
+              specFunctionDecl.identifier.text == "spec"
+        else {
             return .member(member)
         }
-        
+
         let contents = parseSpecOrReusableTestsFunctionDeclaration(
             specFunctionDecl
         )
@@ -51,14 +55,17 @@ class ASTParser {
                 // TODO: let's emit a warning when this returns no test cases? probably means we unrolled a loop incorrectly
                 if functionDeclaration.identifier.text.starts(with: "reusableTests") {
                     let contents = parseSpecOrReusableTestsFunctionDeclaration(functionDeclaration)
-                    let scope = ASTScope(type: .reusableTests(functionName: functionDeclaration.identifier.text), contents: contents)
+                    let scope = ASTScope(
+                        type: .reusableTests(functionName: functionDeclaration.identifier.text),
+                        contents: contents
+                    )
                     return .scope(scope)
                 }
-                
+
                 return .functionDeclaration(functionDeclaration)
             } else {
 //                fatalError("\tTODO handle \(scope)-level \(statement.item)")
-                fatalError("\tTODO parse \(statement.item)") // TODO improve error message
+                fatalError("\tTODO parse \(statement.item)") // TODO: improve error message
             }
         }
     }
@@ -86,9 +93,9 @@ class ASTParser {
                 skipped: calledFunctionName.starts(with: "x")
             )
         case "beforeEach":
-            return .hook(functionCallExpr, .beforeEach)
+            return .hook(functionCallExpr, type: .beforeEach)
         case "afterEach":
-            return .hook(functionCallExpr, .afterEach)
+            return .hook(functionCallExpr, type: .afterEach)
         default:
             if calledFunctionName.starts(with: "reusableTests") {
                 return .reusableTestsCall(functionCallExpr, calledFunctionName: calledFunctionName)
@@ -109,9 +116,10 @@ class ASTParser {
         }
 
         let description = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
-        
-        let contents = parseStatements( trailingClosure.statements )
-        return .scope(ASTScope(type: .describeOrContext(description: description, skipped: skipped), contents: contents))
+
+        let contents = parseStatements(trailingClosure.statements)
+        return .scope(ASTScope(type: .describeOrContext(description: description, skipped: skipped),
+                               contents: contents))
     }
 
     private static func parseItFunctionCall(

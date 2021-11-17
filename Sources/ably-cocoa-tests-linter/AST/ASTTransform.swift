@@ -6,7 +6,7 @@ class ASTTransform {
         var classContents: ClassContents
     }
 
-    static func transformClassContents(_ classContents: ClassContents) -> ClassTransformationResult {
+    static func transformClassContents(_: ClassContents) -> ClassTransformationResult {
         // This all feels a bit clumsy, probably doing something very wrong
 
         let originalMembersBlock = classDeclaration.members
@@ -32,7 +32,7 @@ class ASTTransform {
             classDecl: result
         )
     }
-    
+
     private static func transformClassMember(_ member: MemberDeclListItemSyntax)
         -> ClassMemberTransformationResult
     {
@@ -751,7 +751,7 @@ class ASTTransform {
         let newStatements: CodeBlockItemListSyntax = {
             switch methodCall {
             // TODO: double-check the ordering of the before / after in relation to parents
-            case .beforeEach:
+            case .hook(.beforeEach):
                 var newStatements: CodeBlockItemListSyntax = trailingClosure.statements
 
                 if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(
@@ -804,7 +804,7 @@ class ASTTransform {
                 }
 
                 return newStatements
-            case .afterEach:
+            case .hook(.afterEach):
                 var newStatements: CodeBlockItemListSyntax = trailingClosure.statements
 
                 if let hookSource = scope.hookSourceOfNearestAncestorHavingOwnHookSource(

@@ -13,9 +13,9 @@ struct HookSource {
         case .quickSpecMethodCall:
             switch hookType {
             case .beforeEach:
-                return QuickSpecMethodCall.beforeEach.outputFunctionName(inScope: scope)
+                return QuickSpecMethodCall.hook(.beforeEach).outputFunctionName(inScope: scope)
             case .afterEach:
-                return QuickSpecMethodCall.afterEach.outputFunctionName(inScope: scope)
+                return QuickSpecMethodCall.hook(.afterEach).outputFunctionName(inScope: scope)
             }
         case .contextArg:
             switch hookType {

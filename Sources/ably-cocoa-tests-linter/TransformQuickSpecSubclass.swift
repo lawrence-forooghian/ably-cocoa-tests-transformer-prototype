@@ -21,11 +21,14 @@ class TransformQuickSpecSubclass {
     func transformed() -> ClassTransformationResult {
         let classContents = ASTParser.parseClassDeclaration(classDeclaration)
         let transformationResult = ASTTransform.transformClassContents(classContents)
-        let newClassDeclaration = ASTSerializer.serializeClassContents(transformationResult.classContents, originalClassDeclaration: classDeclaration)
-        
-        return ClassTransformationResult(globalDeclarations: transformationResult.globalDeclarations, classDecl: newClassDeclaration)
+        let newClassDeclaration = ASTSerializer.serializeClassContents(
+            transformationResult.classContents,
+            originalClassDeclaration: classDeclaration
+        )
 
+        return ClassTransformationResult(
+            globalDeclarations: transformationResult.globalDeclarations,
+            classDecl: newClassDeclaration
+        )
     }
-
-
 }
