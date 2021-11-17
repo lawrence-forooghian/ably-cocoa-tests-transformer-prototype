@@ -2,6 +2,17 @@ import SwiftSyntax
 
 // Transforms subclasses of QuickSpec to XCTestCase
 class TransformQuickSpec: SyntaxRewriter {
+    struct Options {
+        var onlyLocalsToGlobals = false
+    }
+
+    let options: Options
+
+    init(options: Options) {
+        self.options = options
+        super.init()
+    }
+
     override func visitAny(_ node: Syntax) -> Syntax? {
         guard let classDecl = node.as(ClassDeclSyntax.self) else {
             return nil
@@ -59,7 +70,8 @@ class TransformQuickSpec: SyntaxRewriter {
         let newInheritanceClause = inheritanceClause.withInheritedTypeCollection(newInheritedTypes)
         let newNode = classDecl.withInheritanceClause(newInheritanceClause)
 
-        let transformed = TransformQuickSpecSubclass(classDeclaration: newNode).transformed()
+        let transformed = TransformQuickSpecSubclass(classDeclaration: newNode, options: options)
+            .transformed()
 
         let codeBlockItemList = SyntaxFactory.makeCodeBlockItemList([
             transformed.globalDeclarations

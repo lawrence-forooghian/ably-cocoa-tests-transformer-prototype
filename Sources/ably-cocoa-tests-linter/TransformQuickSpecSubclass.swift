@@ -2,9 +2,11 @@ import SwiftSyntax
 
 class TransformQuickSpecSubclass {
     private let classDeclaration: ClassDeclSyntax
+    private let options: TransformQuickSpec.Options
 
-    init(classDeclaration: ClassDeclSyntax) {
+    init(classDeclaration: ClassDeclSyntax, options: TransformQuickSpec.Options) {
         self.classDeclaration = classDeclaration
+        self.options = options
     }
 
     var containingClassName: String {
@@ -45,6 +47,11 @@ class TransformQuickSpecSubclass {
         )
     }
 
+    struct ClassMemberTransformationResult {
+        var classLevelDeclarations: [MemberDeclListItemSyntax]
+        var globalDeclarations: [DeclSyntax]
+    }
+
     private func transformClassMember(_ member: MemberDeclListItemSyntax)
         -> ClassMemberTransformationResult
     {
@@ -68,16 +75,43 @@ class TransformQuickSpecSubclass {
             )
         }
 
-        return transformSpecOrReusableTestsFunctionDeclaration(
+        let transformationResult = transformSpecOrReusableTestsFunctionDeclaration(
             specFunctionDecl,
             createDefinedScope: { [ScopeMember(type: .spec, contentsInfo: $0)] }
         )
+
+        var classLevelDeclarations = transformationResult.classLevelDeclarations
+
+        if let replaceWith = transformationResult.replaceWith {
+            guard let decl = replaceWith.as(DeclSyntax.self) else {
+                preconditionFailure(
+                    "Expected a replaceWith that finds its way to class level to be a declaration"
+                )
+            }
+
+            let member = MemberDeclListItemSyntax { builder in
+                builder.useDecl(decl)
+            }
+
+            classLevelDeclarations = [member] + classLevelDeclarations
+        }
+
+        return ClassMemberTransformationResult(
+            classLevelDeclarations: classLevelDeclarations,
+            globalDeclarations: transformationResult.globalDeclarations
+        )
+    }
+
+    struct SyntaxTransformationResult {
+        var replaceWith: Syntax? // nil => remove
+        var classLevelDeclarations: [MemberDeclListItemSyntax]
+        var globalDeclarations: [DeclSyntax]
     }
 
     private func transformSpecOrReusableTestsFunctionDeclaration(
         _ functionDeclaration: FunctionDeclSyntax,
         createDefinedScope: (ScopeMember.ContentsInfo) -> Scope
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         guard let functionBody = functionDeclaration.body else {
             fatalError("Don’t know how to handle function declaration without a body")
         }
@@ -90,18 +124,13 @@ class TransformQuickSpecSubclass {
         )
     }
 
-    struct ClassMemberTransformationResult {
-        var classLevelDeclarations: [MemberDeclListItemSyntax]
-        var globalDeclarations: [DeclSyntax]
-    }
-
     private func transformStatements(
         _ statements: CodeBlockItemListSyntax,
         immediatelyInsideScope scope: Scope
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         // TODO: remove references to spec() here, and check they still apply
 
-        let memberDeclListItems = statements.map { statement -> ClassMemberTransformationResult in
+        let memberDeclListItems = statements.map { statement -> SyntaxTransformationResult in
             // It's a load of CodeBlockItemSyntax, for the variable declarations, then the beforeEach / afterEach, then the describe
 
             // TODO: what if there's stuff that clashes?
@@ -112,7 +141,7 @@ class TransformQuickSpecSubclass {
                 if scope.isReusableTests {
                     // it's not a function call's closure we're inside, it's a function body with local variables, which will remain a function, so can keep its variables intact
                     let decl = DeclSyntax(variableDeclaration)
-                    return ClassMemberTransformationResult(
+                    return SyntaxTransformationResult(
                         classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                             builder.useDecl(decl)
                         }],
@@ -139,7 +168,7 @@ class TransformQuickSpecSubclass {
                 modifiedToPrivateVariableDeclaration = modifiedToPrivateVariableDeclaration
                     .withModifiers(newModifiers)
 
-                return ClassMemberTransformationResult(
+                return SyntaxTransformationResult(
                     classLevelDeclarations: [],
                     globalDeclarations: [DeclSyntax(modifiedToPrivateVariableDeclaration)]
                 )
@@ -153,7 +182,7 @@ class TransformQuickSpecSubclass {
                 // We only have one of these
 
                 let decl = DeclSyntax(structDeclaration)
-                return ClassMemberTransformationResult(
+                return SyntaxTransformationResult(
                     classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                         builder.useDecl(decl)
                     }],
@@ -238,7 +267,7 @@ class TransformQuickSpecSubclass {
                     newFunctionDeclaration =
                         addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
 
-                    return ClassMemberTransformationResult(
+                    return SyntaxTransformationResult(
                         classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                             builder.useDecl(DeclSyntax(newFunctionDeclaration))
                         }],
@@ -250,7 +279,7 @@ class TransformQuickSpecSubclass {
                     // it's not a function call's closure we're inside, it's a function body with local functions, which will remain a function, so can keep its functions intact
                     // TODO: see if we actually have any of this in our codebase
                     let decl = DeclSyntax(functionDeclaration)
-                    return ClassMemberTransformationResult(
+                    return SyntaxTransformationResult(
                         classLevelDeclarations: [MemberDeclListItemSyntax { builder in
                             builder.useDecl(decl)
                         }],
@@ -278,23 +307,23 @@ class TransformQuickSpecSubclass {
                 modifiedToPrivateFunctionDeclaration = modifiedToPrivateFunctionDeclaration
                     .withModifiers(newModifiers)
 
-                return ClassMemberTransformationResult(
+                return SyntaxTransformationResult(
                     classLevelDeclarations: [],
                     globalDeclarations: [DeclSyntax(modifiedToPrivateFunctionDeclaration)]
                 )
             } else {
                 print("\tTODO handle \(scope)-level \(statement.item)")
-                return ClassMemberTransformationResult(
+                return SyntaxTransformationResult(
                     classLevelDeclarations: [],
                     globalDeclarations: []
                 )
             }
         }
-        .reduce(ClassMemberTransformationResult(classLevelDeclarations: [],
-                                                globalDeclarations: [
-                                                ]) /* TODO: an `empty` method */ ) { accum, val in
+        .reduce(SyntaxTransformationResult(classLevelDeclarations: [],
+                                           globalDeclarations: [
+                                           ]) /* TODO: an `empty` method */ ) { accum, val in
             // TODO: from a Swifty point of view it would be nice to define a `+` here
-            ClassMemberTransformationResult(
+            SyntaxTransformationResult(
                 classLevelDeclarations: accum.classLevelDeclarations + val.classLevelDeclarations,
                 globalDeclarations: accum.globalDeclarations + val.globalDeclarations
             )
@@ -376,7 +405,7 @@ class TransformQuickSpecSubclass {
     private func transformFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
         insideScope scope: Scope
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         guard let identifierExpression =
             IdentifierExprSyntax(Syntax(functionCallExpr.calledExpression))
         else {
@@ -419,7 +448,7 @@ class TransformQuickSpecSubclass {
         _ functionCallExpr: FunctionCallExprSyntax,
         insideScope scope: Scope,
         skipped: Bool
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         guard let trailingClosure = functionCallExpr.trailingClosure else {
             // TODO: DRY up with `it`
             preconditionFailure("Expected a trailing closure")
@@ -543,7 +572,7 @@ class TransformQuickSpecSubclass {
         _ functionCallExpr: FunctionCallExprSyntax,
         calledFunctionName: String,
         insideScope scope: Scope
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         // this reusableTests* function call gets turned into a method
         let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false)
             .outputFunctionName(inScope: scope)
@@ -586,7 +615,7 @@ class TransformQuickSpecSubclass {
         ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
             .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
 
-        return ClassMemberTransformationResult(
+        return SyntaxTransformationResult(
             classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
                 decl: DeclSyntax(testFunctionDeclaration),
                 semicolon: nil
@@ -599,7 +628,7 @@ class TransformQuickSpecSubclass {
         _ functionCallExpr: FunctionCallExprSyntax,
         insideScope scope: Scope,
         skipped: Bool
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         // `it` gets turned into a method
 
         let testDescription = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
@@ -706,7 +735,7 @@ class TransformQuickSpecSubclass {
         ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
             .withTrailingTrivia(functionCallExpr.trailingTrivia!)
 
-        return ClassMemberTransformationResult(
+        return SyntaxTransformationResult(
             classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
                 decl: DeclSyntax(testFunctionDeclaration),
                 semicolon: nil
@@ -718,7 +747,7 @@ class TransformQuickSpecSubclass {
     private func transformBeforeOrAfterEachFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
         insideScope scope: Scope
-    ) -> ClassMemberTransformationResult {
+    ) -> SyntaxTransformationResult {
         // `beforeEach` or `afterEach` gets turned into a method
 
         let methodCall = QuickSpecMethodCall(functionCallExpr: functionCallExpr)
@@ -880,7 +909,7 @@ class TransformQuickSpecSubclass {
         ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
             .withTrailingTrivia(functionCallExpr.trailingTrivia!)
 
-        return ClassMemberTransformationResult(
+        return SyntaxTransformationResult(
             classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
                 decl: DeclSyntax(testFunctionDeclaration),
                 semicolon: nil

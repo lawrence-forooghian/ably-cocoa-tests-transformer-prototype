@@ -9,6 +9,8 @@ import SwiftSyntax
 
 // TODO: tidy up this code and make it bloggable / talkable / open sourceable if we so desire
 
+let options = TransformQuickSpec.Options(onlyLocalsToGlobals: false)
+
 let directory = CommandLine.arguments[1]
 let directoryContents = try FileManager.default.contentsOfDirectory(atPath: directory)
 let swiftFiles = directoryContents.filter { $0.hasSuffix(".swift") }
@@ -18,7 +20,7 @@ try swiftFiles.forEach { fileName in
     let url = URL(fileURLWithPath: directory).appendingPathComponent(fileName)
 
     let sourceFile = try SyntaxParser.parse(url)
-    let transformed = TransformQuickSpec().visit(sourceFile)
+    let transformed = TransformQuickSpec(options: options).visit(sourceFile)
 
     try String(describing: transformed).write(to: url, atomically: true, encoding: .utf8)
 }
