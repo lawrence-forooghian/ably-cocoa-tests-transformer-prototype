@@ -8,7 +8,7 @@ class ASTParser {
     }
 
     private static func parseClassMember(_ member: MemberDeclListItemSyntax) -> ClassContents
-        .`Type`
+        .Item
     {
         guard let specFunctionDecl = member.decl.as(FunctionDeclSyntax.self),
               specFunctionDecl.identifier.text == "spec"
@@ -20,7 +20,7 @@ class ASTParser {
             specFunctionDecl
         )
 
-        return .scope(ASTScope(type: .spec, contents: contents))
+        return .scope(ASTScope(type: .spec(specFunctionDecl), contents: contents))
     }
 
     private static func parseSpecOrReusableTestsFunctionDeclaration(
@@ -56,7 +56,10 @@ class ASTParser {
                 if functionDeclaration.identifier.text.starts(with: "reusableTests") {
                     let contents = parseSpecOrReusableTestsFunctionDeclaration(functionDeclaration)
                     let scope = ASTScope(
-                        type: .reusableTests(functionName: functionDeclaration.identifier.text),
+                        type: .reusableTests(
+                            functionDeclaration,
+                            functionName: functionDeclaration.identifier.text
+                        ),
                         contents: contents
                     )
                     return .scope(scope)
@@ -118,7 +121,8 @@ class ASTParser {
         let description = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
 
         let contents = parseStatements(trailingClosure.statements)
-        return .scope(ASTScope(type: .describeOrContext(description: description, skipped: skipped),
+        return .scope(ASTScope(type: .describeOrContext(functionCallExpr, description: description,
+                                                        skipped: skipped),
                                contents: contents))
     }
 

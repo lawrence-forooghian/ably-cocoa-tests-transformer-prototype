@@ -44,8 +44,8 @@ enum QuickSpecMethodCall {
         let unsanitisedComponents: [String] = {
             switch self {
             case .hook(.beforeEach),
-                 .hook(.afterEach): return [description] + scope.map { $0.methodNameComponent }
-            case .it: return scope.map { $0.methodNameComponent } + [description]
+                 .hook(.afterEach): return [description] + scope.map(\.methodNameComponent)
+            case .it: return scope.map(\.methodNameComponent) + [description]
             }
         }()
 

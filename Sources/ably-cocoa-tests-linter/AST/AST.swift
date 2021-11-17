@@ -1,19 +1,19 @@
 import SwiftSyntax
 
 struct ClassContents {
-    enum `Type` {
+    enum Item {
         case member(_: MemberDeclListItemSyntax)
         case scope(_: ASTScope)
     }
 
-    var contents: [Type]
+    var contents: [Item]
 }
 
 struct ASTScope {
     enum `Type`: CustomStringConvertible {
-        case spec
-        case reusableTests(functionName: String)
-        case describeOrContext(description: String, skipped: Bool)
+        case spec(_: FunctionDeclSyntax)
+        case reusableTests(_: FunctionDeclSyntax, functionName: String)
+        case describeOrContext(_: FunctionCallExprSyntax, description: String, skipped: Bool)
 
         var description: String {
             switch self {
