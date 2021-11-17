@@ -86,9 +86,9 @@ class ASTParser {
                 skipped: calledFunctionName.starts(with: "x")
             )
         case "beforeEach":
-            return .beforeEach(functionCallExpr)
+            return .hook(functionCallExpr, .beforeEach)
         case "afterEach":
-            return .afterEach(functionCallExpr)
+            return .hook(functionCallExpr, .afterEach)
         default:
             if calledFunctionName.starts(with: "reusableTests") {
                 return .reusableTestsCall(functionCallExpr, calledFunctionName: calledFunctionName)

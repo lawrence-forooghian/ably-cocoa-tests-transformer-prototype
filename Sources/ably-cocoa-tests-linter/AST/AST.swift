@@ -35,7 +35,6 @@ struct ASTScope {
         case scope(_: ASTScope)
         case it(_: FunctionCallExprSyntax, description: String, skipped: Bool)
         case reusableTestsCall(_: FunctionCallExprSyntax, calledFunctionName: String)
-        case beforeEach(_: FunctionCallExprSyntax)
-        case afterEach(_: FunctionCallExprSyntax)
+        case hook(_: FunctionCallExprSyntax, type: HookType)
     }
 }
