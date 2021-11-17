@@ -40,20 +40,21 @@ enum QuickSpecMethodCall {
         }
     }
 
-    func outputFunctionName(inScope scope: Scope) -> String {
+    func outputFunctionName(inScope scope: AST.Scope) -> String {
         let unsanitisedComponents: [String] = {
             switch self {
             case .hook(.beforeEach),
-                 .hook(.afterEach): return [description] + scope.map(\.methodNameComponent)
-            case .it: return scope.map(\.methodNameComponent) + [description]
+                 .hook(.afterEach): return [description] + scope.levels
+                .map(\.methodNameComponent)
+            case .it: return scope.levels.map(\.methodNameComponent) + [description]
             }
         }()
 
-        let unsantisedName =
+        let unsanitisedName =
             ((!generatesTestMethod || unsanitisedComponents[0].starts(with: "test")) ? "" :
                 "test") + unsanitisedComponents.joined(separator: "_")
 
-        let withoutSymbols = unsantisedName
+        let withoutSymbols = unsanitisedName
             .components(separatedBy: CharacterSet.symbols
                 .union(CharacterSet.punctuationCharacters)).joined(separator: "_")
         let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces)

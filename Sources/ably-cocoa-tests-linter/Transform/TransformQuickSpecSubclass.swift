@@ -19,7 +19,7 @@ class TransformQuickSpecSubclass {
     }
 
     func transformed() -> ASTTransform.ClassTransformationResult {
-        let classContents = ASTParser.parseClassDeclaration(classDeclaration)
+        let classContents = AST.Parser.parseClassDeclaration(classDeclaration)
         return ASTTransform.transformClassDeclaration(classContents)
     }
 }

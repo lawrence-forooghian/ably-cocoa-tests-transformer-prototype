@@ -4,7 +4,7 @@ struct HookSource {
         case contextArg
     }
 
-    var scope: Scope
+    var scope: AST.Scope
     var type: `Type`
     var hookType: HookType
 

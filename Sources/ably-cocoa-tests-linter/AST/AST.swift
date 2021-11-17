@@ -4,17 +4,10 @@ import SwiftSyntax
 // as the syntax used to define it.
 
 enum AST {
-    // TODO: is there still a reason to have a Scope type tying Spec/ReusableTests/DescribeOrContext together?
-
     struct ClassDeclaration {
-        struct Spec {
-            var syntax: MemberDeclListItemSyntax
-            var contents: [Scope.Item]
-        }
-
         enum Item {
             case member(MemberDeclListItemSyntax)
-            case spec(Spec)
+            case spec(ScopeLevel.Spec)
 
             var syntax: MemberDeclListItemSyntax {
                 switch self {
@@ -28,29 +21,38 @@ enum AST {
         var items: [Item]
     }
 
-    enum Scope {
-        struct ReusableTests {
+    enum ScopeLevel {
+        struct Spec {
+            var syntax: MemberDeclListItemSyntax
+            var contents: [Item]
+        }
+
+        struct ReusableTestsDeclaration {
             var syntax: FunctionDeclSyntax
             var functionName: String
-            var contents: [Scope.Item]
+            var contents: [Item]
         }
 
         struct DescribeOrContext {
             var syntax: FunctionCallExprSyntax
             var description: String
             var skipped: Bool
-            var contents: [Scope.Item]
+            var contents: [Item]
         }
 
         enum Item {
             case variableDeclaration(VariableDeclSyntax)
             case functionDeclaration(FunctionDeclSyntax)
             case structDeclaration(StructDeclSyntax)
-            case reusableTests(ReusableTests)
+            case reusableTestsDeclaration(ReusableTestsDeclaration)
             case describeOrContext(DescribeOrContext)
             case it(FunctionCallExprSyntax, description: String, skipped: Bool)
             case reusableTestsCall(FunctionCallExprSyntax, calledFunctionName: String)
             case hook(FunctionCallExprSyntax, type: HookType)
         }
+
+        case spec(Spec)
+        case reusableTestsDeclaration(ReusableTestsDeclaration)
+        case describeOrContext(DescribeOrContext)
     }
 }
