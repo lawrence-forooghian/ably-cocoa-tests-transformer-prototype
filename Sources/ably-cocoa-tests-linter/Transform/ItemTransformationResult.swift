@@ -35,6 +35,10 @@ extension ASTTransform.ItemTransformationResult {
         self.init(globalDeclarations: [], classDeclarationItems: [classDeclarationItem])
     }
 
+    init(_ scopeItem: AST.ScopeLevel.Item) {
+        self.init(globalDeclarations: [], classDeclarationItems: [], scopeContents: [scopeItem])
+    }
+
     init<T: DeclSyntaxProtocol>(classLevelDeclaration: T) {
         let member = MemberDeclListItemSyntax { builder in
             let syntax = DeclSyntax(classLevelDeclaration)

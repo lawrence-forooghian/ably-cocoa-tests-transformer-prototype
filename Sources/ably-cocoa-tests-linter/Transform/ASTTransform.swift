@@ -217,6 +217,10 @@ struct ASTTransform {
         _ reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
+        if options.onlyLocalsToGlobals {
+            return .init(.reusableTestsCall(reusableTestsCall))
+        }
+
         // this reusableTests* function call gets turned into a method
         let methodName = QuickSpecMethodCall.it(
             testDescription: reusableTestsCall.calledFunctionName,
@@ -269,6 +273,10 @@ struct ASTTransform {
         _ it: AST.ScopeLevel.Item.It,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
+        if options.onlyLocalsToGlobals {
+            return .init(.it(it))
+        }
+
         // `it` gets turned into a method
 
         let testDescription = QuickSpecMethodCall.getFunctionArgument(it.syntax)
@@ -385,6 +393,10 @@ struct ASTTransform {
         _ hook: AST.ScopeLevel.Item.Hook,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
+        if options.onlyLocalsToGlobals {
+            return .init(.hook(hook))
+        }
+
         // `beforeEach` or `afterEach` gets turned into a method
 
         let methodCall = QuickSpecMethodCall(functionCallExpr: hook.syntax)
