@@ -70,8 +70,11 @@ class TransformQuickSpec: SyntaxRewriter {
         let newInheritanceClause = inheritanceClause.withInheritedTypeCollection(newInheritedTypes)
         let newNode = classDecl.withInheritanceClause(newInheritanceClause)
 
-        let transformed = TransformQuickSpecSubclass(classDeclaration: newNode, options: options)
-            .transformed()
+        let transformed = TransformQuickSpecSubclass(
+            classDeclaration: options.onlyLocalsToGlobals ? classDecl : newNode,
+            options: options
+        )
+        .transformed()
 
         let codeBlockItemList = SyntaxFactory.makeCodeBlockItemList([
             transformed.globalDeclarations
