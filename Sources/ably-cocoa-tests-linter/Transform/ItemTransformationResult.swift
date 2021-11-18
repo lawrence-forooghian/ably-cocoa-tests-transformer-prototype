@@ -2,8 +2,8 @@ import SwiftSyntax
 
 extension ASTTransform {
     struct ItemTransformationResult {
-        fileprivate(set) var globalDeclarations: [DeclSyntax]
-        fileprivate(set) var classDeclarationItems: [AST.ClassDeclaration.Item]
+        var globalDeclarations: [DeclSyntax]
+        var classDeclarationItems: [AST.ClassDeclaration.Item]
 
         static let empty = Self(globalDeclarations: [], classDeclarationItems: [])
 

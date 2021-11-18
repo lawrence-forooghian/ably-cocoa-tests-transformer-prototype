@@ -176,24 +176,30 @@ enum ASTTransform {
             // preserve any comments that came alongside the function call
             // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
             // and a bunch of unwanted whitespace
-            transformationResult.classDeclarationItems[0].syntax.leadingTrivia = describeOrContext
-                .syntax.leadingTrivia! + transformationResult.classDeclarationItems[0].syntax
-                .leadingTrivia!
+            if case let .member(syntax) = transformationResult.classDeclarationItems[0] {
+                var newSyntax = syntax
+                newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
+                    .leadingTrivia!
+                transformationResult.classDeclarationItems[0] = .member(newSyntax)
+            }
         }
         return transformationResult
     }
 
     // TODO: DRY up with transformIt
     private static func transformReusableTestsCall(
-        _: AST.ScopeLevel.Item.ReusableTestsCall,
+        _ reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
         // this reusableTests* function call gets turned into a method
-        let methodName = QuickSpecMethodCall.it(testDescription: calledFunctionName, skipped: false)
-            .outputFunctionName(inScope: scope)
+        let methodName = QuickSpecMethodCall.it(
+            testDescription: reusableTestsCall.calledFunctionName,
+            skipped: false
+        )
+        .outputFunctionName(inScope: scope)
 
         let newFunctionCallExpr = SyntaxManipulationHelpers.addContextToReusableTestsFunctionCall(
-            functionCallExpr,
+            reusableTestsCall.syntax,
             insideScope: scope
         )
 
@@ -230,29 +236,26 @@ enum ASTTransform {
         ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
             .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
 
-        return ItemTransformationResult(
-            classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
-                decl: DeclSyntax(testFunctionDeclaration),
-                semicolon: nil
-            )],
-            globalDeclarations: []
-        )
+        return .init(classLevelDeclaration: testFunctionDeclaration)
     }
 
     private static func transformIt(
-        _: AST.ScopeLevel.Item.It,
+        _ it: AST.ScopeLevel.Item.It,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
         // `it` gets turned into a method
 
-        let testDescription = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
+        let testDescription = QuickSpecMethodCall.getFunctionArgument(it.syntax)
 
-        let methodName = QuickSpecMethodCall.it(testDescription: testDescription, skipped: skipped)
-            .outputFunctionName(inScope: scope)
+        let methodName = QuickSpecMethodCall.it(
+            testDescription: testDescription,
+            skipped: it.skipped
+        )
+        .outputFunctionName(inScope: scope)
 
         // Now we grab the trailing closure from the call to `it` and use that as the new test method's body
 
-        guard let trailingClosure = functionCallExpr.trailingClosure else {
+        guard let trailingClosure = it.syntax.trailingClosure else {
             preconditionFailure("I expect a call to `it` to have a trailing closure")
         }
 
@@ -346,31 +349,25 @@ enum ASTTransform {
                 statements: newStatements,
                 rightBrace: trailingClosure.rightBrace
             )
-        ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
-            .withTrailingTrivia(functionCallExpr.trailingTrivia!)
+        ).withLeadingTrivia(it.syntax.leadingTrivia!)
+            .withTrailingTrivia(it.syntax.trailingTrivia!)
 
-        return ItemTransformationResult(
-            classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
-                decl: DeclSyntax(testFunctionDeclaration),
-                semicolon: nil
-            )],
-            globalDeclarations: []
-        )
+        return .init(classLevelDeclaration: testFunctionDeclaration)
     }
 
     private static func transformHook(
-        _: AST.ScopeLevel.Item.Hook,
+        _ hook: AST.ScopeLevel.Item.Hook,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
         // `beforeEach` or `afterEach` gets turned into a method
 
-        let methodCall = QuickSpecMethodCall(functionCallExpr: functionCallExpr)
+        let methodCall = QuickSpecMethodCall(functionCallExpr: hook.syntax)
         let methodName = methodCall.outputFunctionName(inScope: scope)
 
         // Now we grab the trailing closure from the call to `before/afterEach` and use that as the new test method's body
         // TODO: we can probably DRY this up with the `it` equivalent
 
-        guard let trailingClosure = functionCallExpr.trailingClosure else {
+        guard let trailingClosure = hook.syntax.trailingClosure else {
             preconditionFailure("I expect a call to `before/afterEach` to have a trailing closure")
         }
 
@@ -497,7 +494,7 @@ enum ASTTransform {
 
         // we do actually have one example of a propertly nested beforeEach – see "State WaitingForDeregistration" in PushActivationStateMachine tests. not sure we have any afterEach
 
-        let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
+        let hookFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
             attributes: nil,
             modifiers: nil,
             funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
@@ -520,15 +517,9 @@ enum ASTTransform {
                 statements: newStatements,
                 rightBrace: trailingClosure.rightBrace
             )
-        ).withLeadingTrivia(functionCallExpr.leadingTrivia!)
-            .withTrailingTrivia(functionCallExpr.trailingTrivia!)
+        ).withLeadingTrivia(hook.syntax.leadingTrivia!)
+            .withTrailingTrivia(hook.syntax.trailingTrivia!)
 
-        return ItemTransformationResult(
-            classLevelDeclarations: [SyntaxFactory.makeMemberDeclListItem(
-                decl: DeclSyntax(testFunctionDeclaration),
-                semicolon: nil
-            )],
-            globalDeclarations: []
-        )
+        return .init(classLevelDeclaration: hookFunctionDeclaration)
     }
 }
