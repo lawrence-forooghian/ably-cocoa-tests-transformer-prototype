@@ -12,11 +12,16 @@ struct ASTTransform {
         -> ClassTransformationResult
     {
         let transformationResults = classDeclaration.items.map(transformClassDeclarationItem)
+        // TODO: we can probably encode this in the type system instead - a scope transformation type or something
+        precondition(
+            transformationResults.allSatisfy { $0.scopeContents == nil },
+            "Didn't expect to get scope contents in class transformation"
+        )
 
         return ClassTransformationResult(
             globalDeclarations: transformationResults.flatMap(\.globalDeclarations),
             classDeclaration: classDeclaration
-                .replacingItems(transformationResults.flatMap(\.classDeclarationItems))
+                .replacingItems(with: transformationResults.flatMap(\.classDeclarationItems))
         )
     }
 

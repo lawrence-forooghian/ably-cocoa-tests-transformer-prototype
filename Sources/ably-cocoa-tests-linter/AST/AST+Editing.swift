@@ -1,7 +1,7 @@
 import SwiftSyntax
 
 extension AST.ClassDeclaration {
-    func replacingItems(_ newItems: [Item]) -> Self {
+    func replacingItems(with newItems: [Item]) -> Self {
         var result = self
 
         result.items = newItems
