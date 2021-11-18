@@ -101,15 +101,15 @@ extension AST {
                     skipped: calledFunctionName.starts(with: "x")
                 )
             case "beforeEach":
-                return .hook(functionCallExpr, type: .beforeEach)
+                return .hook(.init(syntax: functionCallExpr, hookType: .beforeEach))
             case "afterEach":
-                return .hook(functionCallExpr, type: .afterEach)
+                return .hook(.init(syntax: functionCallExpr, hookType: .afterEach))
             default:
                 if calledFunctionName.starts(with: "reusableTests") {
-                    return .reusableTestsCall(
-                        functionCallExpr,
+                    return .reusableTestsCall(.init(
+                        syntax: functionCallExpr,
                         calledFunctionName: calledFunctionName
-                    )
+                    ))
                 }
 
                 //            preconditionFailure("Unexpected \(scope)-level call to \(calledFunctionName)") // TODO restore scope in message
@@ -138,7 +138,8 @@ extension AST {
             skipped: Bool
         ) -> AST.ScopeLevel.Item {
             let testDescription = QuickSpecMethodCall.getFunctionArgument(functionCallExpr)
-            return .it(functionCallExpr, description: testDescription, skipped: skipped)
+            return .it(.init(syntax: functionCallExpr, description: testDescription,
+                             skipped: skipped))
         }
     }
 }

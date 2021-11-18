@@ -32,7 +32,7 @@ extension AST.ScopeLevel {
 
     func hasOwnHook(ofType hookType: HookType) -> Bool {
         return contents.contains { item in
-            if case .hook(_, type: hookType) = item {
+            if case let .hook(hook) = item, hook.hookType == hookType {
                 return true
             }
             return false

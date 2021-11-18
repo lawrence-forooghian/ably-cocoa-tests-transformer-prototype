@@ -10,6 +10,7 @@ extension AST.ClassDeclaration {
         let originalMembersBlock = syntax.members
 
         // This feels a bit clumsy, maybe doing something wrong
+        // TODO: move this into some black box where we do all the SwiftSyntax-manipulation-faffing-around
         let newMembersBlock = MemberDeclBlockSyntax { builder in
             builder.useLeftBrace(originalMembersBlock.leftBrace)
             builder.useRightBrace(originalMembersBlock.rightBrace)

@@ -41,14 +41,30 @@ enum AST {
         }
 
         enum Item {
+            struct It {
+                var syntax: FunctionCallExprSyntax
+                var description: String
+                var skipped: Bool
+            }
+
+            struct ReusableTestsCall {
+                var syntax: FunctionCallExprSyntax
+                var calledFunctionName: String
+            }
+
+            struct Hook {
+                var syntax: FunctionCallExprSyntax
+                var hookType: HookType
+            }
+
             case variableDeclaration(VariableDeclSyntax)
             case functionDeclaration(FunctionDeclSyntax)
             case structDeclaration(StructDeclSyntax)
             case reusableTestsDeclaration(ReusableTestsDeclaration)
             case describeOrContext(DescribeOrContext)
-            case it(FunctionCallExprSyntax, description: String, skipped: Bool)
-            case reusableTestsCall(FunctionCallExprSyntax, calledFunctionName: String)
-            case hook(FunctionCallExprSyntax, type: HookType)
+            case it(It)
+            case reusableTestsCall(ReusableTestsCall)
+            case hook(Hook)
         }
 
         case spec(Spec)
