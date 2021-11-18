@@ -1,12 +1,14 @@
 import SwiftSyntax
 
-enum ASTTransform {
+struct ASTTransform {
     struct ClassTransformationResult {
         var globalDeclarations: [DeclSyntax]
         var classDeclaration: AST.ClassDeclaration
     }
 
-    static func transformClassDeclaration(_ classDeclaration: AST.ClassDeclaration)
+    var options: TransformQuickSpec.Options
+
+    func transformClassDeclaration(_ classDeclaration: AST.ClassDeclaration)
         -> ClassTransformationResult
     {
         let transformationResults = classDeclaration.items.map(transformClassDeclarationItem)
@@ -18,7 +20,7 @@ enum ASTTransform {
         )
     }
 
-    private static func transformClassDeclarationItem(_ item: AST.ClassDeclaration.Item)
+    private func transformClassDeclarationItem(_ item: AST.ClassDeclaration.Item)
         -> ItemTransformationResult
     {
         // I think the only class-level thing we want to manipulate is the `spec` function – everything else
@@ -35,12 +37,13 @@ enum ASTTransform {
         }
     }
 
-    private static func transformContents(
+    private func transformContents(
         _ contents: [AST.ScopeLevel.Item],
         immediatelyInsideScope scope: AST.Scope
     ) -> ItemTransformationResult {
         return contents.map { item -> ItemTransformationResult in
-            // TODO: what if there's stuff that clashes?
+            // TODO: what if there's stuff that clashes? especially once we shift things around in scope
+            // e.g. `name` property on test case
 
             switch item {
             case let .variableDeclaration(variableDecl) where scope.isReusableTests:
@@ -82,7 +85,7 @@ enum ASTTransform {
         .reduce(.empty) { $0.appending($1) }
     }
 
-    private static func transformReusableTestsDeclaration(_ reusableTestsDecl: AST.ScopeLevel
+    private func transformReusableTestsDeclaration(_ reusableTestsDecl: AST.ScopeLevel
         .ReusableTestsDeclaration) -> ItemTransformationResult
     {
         // TODO: this method is a huge mess, let's tidy it up
@@ -163,7 +166,7 @@ enum ASTTransform {
         return .init(classLevelDeclaration: newFunctionDeclaration)
     }
 
-    private static func transformDescribeOrContext(
+    private func transformDescribeOrContext(
         _ describeOrContext: AST.ScopeLevel.DescribeOrContext,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
@@ -187,7 +190,7 @@ enum ASTTransform {
     }
 
     // TODO: DRY up with transformIt
-    private static func transformReusableTestsCall(
+    private func transformReusableTestsCall(
         _ reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
@@ -239,7 +242,7 @@ enum ASTTransform {
         return .init(classLevelDeclaration: testFunctionDeclaration)
     }
 
-    private static func transformIt(
+    private func transformIt(
         _ it: AST.ScopeLevel.Item.It,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
@@ -355,7 +358,7 @@ enum ASTTransform {
         return .init(classLevelDeclaration: testFunctionDeclaration)
     }
 
-    private static func transformHook(
+    private func transformHook(
         _ hook: AST.ScopeLevel.Item.Hook,
         insideScope scope: AST.Scope
     ) -> ItemTransformationResult {
