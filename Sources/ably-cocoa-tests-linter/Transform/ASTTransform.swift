@@ -35,10 +35,20 @@ struct ASTTransform {
         case .member:
             return .init(item)
         case let .spec(spec):
-            return transformContents(
+            var transformationResult = transformContents(
                 spec.contents,
                 immediatelyInsideScope: .init(topLevel: .spec(spec))
             )
+
+            // TODO: if this is a pattern then DRY up
+            if let newScopeContents = transformationResult.scopeContents {
+                let newSpec = spec.replacingContents(with: newScopeContents)
+
+                transformationResult.scopeContents = nil
+                transformationResult.classDeclarationItems.append(.spec(newSpec))
+            }
+
+            return transformationResult
         }
     }
 
@@ -191,6 +201,14 @@ struct ASTTransform {
                 transformationResult.classDeclarationItems[0] = .member(newSyntax)
             }
         }
+
+        // TODO: if this is a pattern then DRY up
+        if let newScopeContents = transformationResult.scopeContents {
+            let newDescribeOrContext = describeOrContext.replacingContents(with: newScopeContents)
+
+            transformationResult.scopeContents = [.describeOrContext(newDescribeOrContext)]
+        }
+
         return transformationResult
     }
 

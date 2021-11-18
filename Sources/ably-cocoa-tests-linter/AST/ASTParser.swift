@@ -27,7 +27,8 @@ extension AST {
                 specFunctionDecl
             )
 
-            return .spec(.init(syntax: member, contents: contents))
+            return .spec(.init(syntax: member, functionDeclaration: specFunctionDecl,
+                               contents: contents))
         }
 
         private static func parseSpecOrReusableTestsFunctionDeclaration(

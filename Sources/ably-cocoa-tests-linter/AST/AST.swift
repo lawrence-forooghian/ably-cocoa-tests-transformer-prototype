@@ -24,6 +24,8 @@ enum AST {
     enum ScopeLevel {
         struct Spec {
             var syntax: MemberDeclListItemSyntax
+            // This is de-normalised for easy editing
+            var functionDeclaration: FunctionDeclSyntax
             var contents: [Item]
         }
 
@@ -65,6 +67,27 @@ enum AST {
             case it(It)
             case reusableTestsCall(ReusableTestsCall)
             case hook(Hook)
+
+            var syntax: Syntax {
+                switch self {
+                case let .variableDeclaration(variableDecl):
+                    return Syntax(variableDecl)
+                case let .functionDeclaration(functionDecl):
+                    return Syntax(functionDecl)
+                case let .structDeclaration(structDecl):
+                    return Syntax(structDecl)
+                case let .reusableTestsDeclaration(reusableTestsDeclaration):
+                    return Syntax(reusableTestsDeclaration.syntax)
+                case let .describeOrContext(describeOrContext):
+                    return Syntax(describeOrContext.syntax)
+                case let .it(it):
+                    return Syntax(it.syntax)
+                case let .reusableTestsCall(reusableTestsCall):
+                    return Syntax(reusableTestsCall.syntax)
+                case let .hook(hook):
+                    return Syntax(hook.syntax)
+                }
+            }
         }
 
         case spec(Spec)
