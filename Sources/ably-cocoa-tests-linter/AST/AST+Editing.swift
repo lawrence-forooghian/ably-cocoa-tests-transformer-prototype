@@ -37,21 +37,28 @@ private func makeCodeBlockItemList(forContents contents: [AST.ScopeLevel.Item])
     })
 }
 
+private func replaceContents(
+    ofFunctionDecl functionDecl: FunctionDeclSyntax,
+    with newContents: [AST.ScopeLevel.Item]
+) -> FunctionDeclSyntax {
+    // Fix up the syntax
+    let newStatements = makeCodeBlockItemList(forContents: newContents)
+
+    var newFunctionDeclaration = functionDecl
+    // TODO: I've already unwrapped this once when parsing, would be nice to not again
+    newFunctionDeclaration.body!.statements = newStatements
+
+    return newFunctionDeclaration
+}
+
 extension AST.ScopeLevel.Spec {
     func replacingContents(with newContents: [AST.ScopeLevel.Item]) -> Self {
         var result = self
 
         result.contents = newContents
-
-        // Fix up the syntax
-        let newStatements = makeCodeBlockItemList(forContents: newContents)
-
-        var newFunctionDeclaration = functionDeclaration
-        // TODO: I've already unwrapped this once, why again?
-        newFunctionDeclaration.body!.statements = newStatements
-
-        result.functionDeclaration = newFunctionDeclaration
-        result.syntax.decl = DeclSyntax(newFunctionDeclaration)
+        result.syntax
+            .decl =
+            DeclSyntax(replaceContents(ofFunctionDecl: functionDeclaration, with: newContents))
 
         return result
     }
@@ -64,8 +71,19 @@ extension AST.ScopeLevel.DescribeOrContext {
         result.contents = newContents
 
         // Fix up the syntax
-        // TODO: I've already unwrapped this once, why again?
+        // TODO: I've already unwrapped this once when parsing, would be nice to not again
         result.syntax.trailingClosure!.statements = makeCodeBlockItemList(forContents: newContents)
+
+        return result
+    }
+}
+
+extension AST.ScopeLevel.ReusableTestsDeclaration {
+    func replacingContents(with newContents: [AST.ScopeLevel.Item]) -> Self {
+        var result = self
+
+        result.contents = newContents
+        result.syntax = replaceContents(ofFunctionDecl: syntax, with: newContents)
 
         return result
     }

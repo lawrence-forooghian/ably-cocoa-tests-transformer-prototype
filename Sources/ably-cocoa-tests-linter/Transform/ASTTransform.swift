@@ -12,63 +12,62 @@ struct ASTTransform {
         -> ClassTransformationResult
     {
         let transformationResults = classDeclaration.items.map(transformClassDeclarationItem)
-        // TODO: we can probably encode this in the type system instead - a scope transformation type or something
-        precondition(
-            transformationResults.allSatisfy { $0.scopeContents == nil },
-            "Didn't expect to get scope contents in class transformation"
-        )
 
         return ClassTransformationResult(
             globalDeclarations: transformationResults.flatMap(\.globalDeclarations),
             classDeclaration: classDeclaration
-                .replacingItems(with: transformationResults.flatMap(\.classDeclarationItems))
+                .replacingItems(with: transformationResults.flatMap(\.replacementItems))
         )
     }
 
     private func transformClassDeclarationItem(_ item: AST.ClassDeclaration.Item)
-        -> ItemTransformationResult
+        -> ClassDeclarationItemTransformationResult
     {
         // I think the only class-level thing we want to manipulate is the `spec` function – everything else
         // we can pass through
 
         switch item {
         case .member:
-            return .init(item)
+            return .init(replacementItems: [item], globalDeclarations: [])
         case let .spec(spec):
-            var transformationResult = transformContents(
+            let contentsTransformationResult = transformContents(
                 spec.contents,
                 immediatelyInsideScope: .init(topLevel: .spec(spec))
             )
 
-            // TODO: if this is a pattern then DRY up
-            if let newScopeContents = transformationResult.scopeContents {
-                let newSpec = spec.replacingContents(with: newScopeContents)
-
-                transformationResult.scopeContents = nil
-                transformationResult.classDeclarationItems.append(.spec(newSpec))
+            if options.onlyLocalsToGlobals {
+                let newSpec = spec
+                    .replacingContents(with: contentsTransformationResult.replacementContents)
+                return .init(
+                    replacementItems: contentsTransformationResult
+                        .classDeclarationItems + [.spec(newSpec)],
+                    globalDeclarations: contentsTransformationResult.globalDeclarations
+                )
+            } else {
+                return .init(
+                    replacementItems: contentsTransformationResult.classDeclarationItems,
+                    globalDeclarations: contentsTransformationResult.globalDeclarations
+                )
             }
-
-            return transformationResult
         }
     }
 
     private func transformContents(
         _ contents: [AST.ScopeLevel.Item],
         immediatelyInsideScope scope: AST.Scope
-    ) -> ItemTransformationResult {
-        return contents.map { item -> ItemTransformationResult in
+    ) -> ScopeLevelItemTransformationResult {
+        return contents.map { item -> ScopeLevelItemTransformationResult in
             // TODO: what if there's stuff that clashes? especially once we shift things around in scope
             // e.g. `name` property on test case
 
             switch item {
-            case let .variableDeclaration(variableDecl) where scope.isReusableTests:
-                // it's not a function call's closure we're inside, it's a function body with local variables, which will remain a function, so can keep its variables intact
-                // TODO: this is wildly misleading - that it says class level declaration when it's not
-                return .init(classLevelDeclaration: variableDecl)
-            case let .functionDeclaration(functionDecl) where scope.isReusableTests:
-                // it's not a function call's closure we're inside, it's a function body with local functions, which will remain a function, so can keep its functions intact
-                // TODO: see if we actually have any of this in our codebase
-                return .init(classLevelDeclaration: functionDecl)
+            case .variableDeclaration where scope.isReusableTests:
+                // it's not a function call's closure we're inside, it's a function body with local variables, which will remain local
+                return .init(replacementItem: item)
+            case .functionDeclaration where scope.isReusableTests:
+                // it's not a function call's closure we're inside, it's a function body with local functions, which will remain local
+                // TODO: see if we actually have any functions like this in our codebase
+                return .init(replacementItem: item)
             case let .variableDeclaration(variableDecl):
                 // Variable declarations in the body of a trailing closure passed to spec / describe etc
                 // get hoisted to private global variables
@@ -101,39 +100,43 @@ struct ASTTransform {
     }
 
     private func transformReusableTestsDeclaration(_ reusableTestsDecl: AST.ScopeLevel
-        .ReusableTestsDeclaration) -> ItemTransformationResult
+        .ReusableTestsDeclaration) -> ScopeLevelItemTransformationResult
     {
         // TODO: this method is a huge mess, let's tidy it up
         // TODO: let's emit a warning when this returns no test cases? probably means we unrolled a loop incorrectly
         // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
         // but we preserve the containing function and make it also invoke all of the test cases
 
-        let classDeclarationItems = transformContents(
+        let transformationResult = transformContents(
             reusableTestsDecl.contents,
             immediatelyInsideScope: .init(topLevel: .reusableTestsDeclaration(reusableTestsDecl))
-        ).classDeclarationItems
+        )
 
-        // wait, no, we'll keep it as a function call
+        // TODO: OK, so the problem here is that the thing for transforming an `it` doesn't know that it needs to be placed at either scope level or class level depending on whether it's in reusable tests. So let's push that logic up into transformContents as we did for variables / functions.
 
-        var newFunctionDeclaration = reusableTestsDecl.syntax
+        // TODO: this should probably also be encapsulated into a SyntaxManipulationHelpers function
 
-        // TODO: this is also probably hacky - we're taking a bunch of class member items and turning them back into just declarations. Not necessary
-        let codeBlockItemsFromFunction = classDeclarationItems.map { classDeclarationItem in
-            SyntaxFactory.makeCodeBlockItem(
-                item: Syntax(classDeclarationItem.syntax.decl),
-                semicolon: nil,
-                errorTokens: nil
-            )
-        }
+        var newReusableTestsDecl = reusableTestsDecl
+            .replacingContents(with: transformationResult.replacementContents)
+
+        /*
+
+         // TODO: this is also probably hacky - we're taking a bunch of class member items and turning them back into just declarations. Not necessary
+         let codeBlockItemsFromFunction = classDeclarationItems.map { classDeclarationItem in
+             SyntaxFactory.makeCodeBlockItem(
+                 item: Syntax(classDeclarationItem.syntax.decl),
+                 semicolon: nil,
+                 errorTokens: nil
+             )
+         }
+          */
 
         // TODO: this is a bit hacky – we're essentially figuring out which
         // test methods were created by transformSpecFunctionDeclarationIntoClassLevelDeclarations
         // but we could probably just improve things to make it tell us that
-        let testFunctionDeclarations = classDeclarationItems
-            .compactMap { classDeclarationItem -> FunctionDeclSyntax? in
-                guard let functionDeclaration = classDeclarationItem.syntax.decl
-                    .as(FunctionDeclSyntax.self)
-                else {
+        let testFunctionDeclarations = transformationResult.replacementContents
+            .compactMap { item -> FunctionDeclSyntax? in
+                guard case let .functionDeclaration(functionDeclaration) = item else {
                     return nil
                 }
                 if !functionDeclaration.identifier.text.starts(with: "test") {
@@ -144,6 +147,7 @@ struct ASTTransform {
             }
 
         // We now invoke all of these functions.
+        // TODO: how will we represent that in our AST? They're just random function calls. That's a pain. Maybe we'll just not represent them in the AST and only in the syntax... OK, yeah, we'll do that for now. But it's a bit dodgy
         let testFunctionInvocationCodeBlockItems = testFunctionDeclarations
             .map { declaration -> CodeBlockItemSyntax in
                 let testFunctionInvocationExpression = SyntaxFactory
@@ -168,45 +172,57 @@ struct ASTTransform {
                 )
             }
 
+        // Now we update the function declaration of newReusableTestsDecl
+        // to insert calls to the
+        var newFunctionDeclaration = newReusableTestsDecl.syntax
+
         // TODO: should we stick some logging into these test functions or something?
 
-        newFunctionDeclaration.body!.statements = SyntaxFactory
-            .makeCodeBlockItemList(codeBlockItemsFromFunction +
-                testFunctionInvocationCodeBlockItems)
+        testFunctionInvocationCodeBlockItems.forEach { item in
+            newFunctionDeclaration.body!.statements = newFunctionDeclaration.body!.statements
+                .appending(item)
+        }
 
         newFunctionDeclaration =
             SyntaxManipulationHelpers
                 .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
 
-        return .init(classLevelDeclaration: newFunctionDeclaration)
+        // TODO: similarly to the test function invocations, there's nothing in the AST to indicate that this is now a "transformed" reusableTests declaration (with context arg).
+        newReusableTestsDecl.syntax = newFunctionDeclaration
+
+        var newTransformationResult = transformationResult
+        newTransformationResult
+            .replacementContents = [.reusableTestsDeclaration(newReusableTestsDecl)]
+        return newTransformationResult
     }
 
     private func transformDescribeOrContext(
         _ describeOrContext: AST.ScopeLevel.DescribeOrContext,
         insideScope scope: AST.Scope
-    ) -> ItemTransformationResult {
+    ) -> ScopeLevelItemTransformationResult {
         var transformationResult = transformContents(
             describeOrContext.contents,
             immediatelyInsideScope: scope
                 .appending(AST.ScopeLevel.describeOrContext(describeOrContext))
         )
-        if !transformationResult.classDeclarationItems.isEmpty {
-            // preserve any comments that came alongside the function call
-            // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
-            // and a bunch of unwanted whitespace
-            if case let .member(syntax) = transformationResult.classDeclarationItems[0] {
-                var newSyntax = syntax
-                newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
-                    .leadingTrivia!
-                transformationResult.classDeclarationItems[0] = .member(newSyntax)
+
+        if options.onlyLocalsToGlobals {
+            let newDescribeOrContext = describeOrContext
+                .replacingContents(with: transformationResult.replacementContents)
+            transformationResult.replacementContents = [.describeOrContext(newDescribeOrContext)]
+        } else {
+            if !transformationResult.classDeclarationItems.isEmpty {
+                // preserve any comments that came alongside the function call
+                // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
+                // and a bunch of unwanted whitespace
+                if case let .member(syntax) = transformationResult.classDeclarationItems[0] {
+                    var newSyntax = syntax
+                    newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
+                        .leadingTrivia!
+                    transformationResult.classDeclarationItems[0] = .member(newSyntax)
+                }
             }
-        }
-
-        // TODO: if this is a pattern then DRY up
-        if let newScopeContents = transformationResult.scopeContents {
-            let newDescribeOrContext = describeOrContext.replacingContents(with: newScopeContents)
-
-            transformationResult.scopeContents = [.describeOrContext(newDescribeOrContext)]
+            transformationResult.replacementContents = []
         }
 
         return transformationResult
@@ -216,9 +232,9 @@ struct ASTTransform {
     private func transformReusableTestsCall(
         _ reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
         insideScope scope: AST.Scope
-    ) -> ItemTransformationResult {
+    ) -> ScopeLevelItemTransformationResult {
         if options.onlyLocalsToGlobals {
-            return .init(.reusableTestsCall(reusableTestsCall))
+            return .init(replacementItem: .reusableTestsCall(reusableTestsCall))
         }
 
         // this reusableTests* function call gets turned into a method
@@ -266,15 +282,16 @@ struct ASTTransform {
         ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
             .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
 
+        // TODO: I guess technically it could be nested inside another reusable tests
         return .init(classLevelDeclaration: testFunctionDeclaration)
     }
 
     private func transformIt(
         _ it: AST.ScopeLevel.Item.It,
         insideScope scope: AST.Scope
-    ) -> ItemTransformationResult {
+    ) -> ScopeLevelItemTransformationResult {
         if options.onlyLocalsToGlobals {
-            return .init(.it(it))
+            return .init(replacementItem: .it(it))
         }
 
         // `it` gets turned into a method
@@ -392,9 +409,9 @@ struct ASTTransform {
     private func transformHook(
         _ hook: AST.ScopeLevel.Item.Hook,
         insideScope scope: AST.Scope
-    ) -> ItemTransformationResult {
+    ) -> ScopeLevelItemTransformationResult {
         if options.onlyLocalsToGlobals {
-            return .init(.hook(hook))
+            return .init(replacementItem: .hook(hook))
         }
 
         // `beforeEach` or `afterEach` gets turned into a method
