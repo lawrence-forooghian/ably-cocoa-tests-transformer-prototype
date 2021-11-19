@@ -200,11 +200,13 @@ struct ASTTransform {
                 .appending(AST.ScopeLevel.describeOrContext(describeOrContext))
         )
 
-        let itemsWithoutReplacementContents = transformationResult.items.filter { item in
-            if case .replacementItem = item {
-                return false
-            } else {
-                return true
+        let itemsWithoutReplacementContents = { (result: ScopeLevelItemTransformationResult) in
+            return result.items.filter { item in
+                if case .replacementItem = item {
+                    return false
+                } else {
+                    return true
+                }
             }
         }
 
@@ -214,23 +216,33 @@ struct ASTTransform {
             // TODO: this could be neater; we probably should have kept globalVariables separate from the other two
 
             transformationResult
-                .items = itemsWithoutReplacementContents +
+                .items = itemsWithoutReplacementContents(transformationResult) +
                 [.replacementItem(.init(item: .describeOrContext(newDescribeOrContext)))]
         } else {
-            // TODO: restore
-//            if !transformationResult.classDeclarationItems.isEmpty {
-//                // preserve any comments that came alongside the function call
-//                // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
-//                // and a bunch of unwanted whitespace
-//                if case let .member(syntax) = transformationResult.classDeclarationItems[0] {
-//                    var newSyntax = syntax
-//                    newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
-//                        .leadingTrivia!
-//                    transformationResult.classDeclarationItems[0] = .member(newSyntax)
-//                }
-//            }
-            // TODO: should we like check that replacementContents is empty here?
-            transformationResult.items = itemsWithoutReplacementContents
+            // TODO This is so clunky, interacting with this transformationResult.items
+            let firstClassDeclarationItemResults = transformationResult.items.enumerated()
+                .first { item in
+                    if case .classDeclarationItem = item.element {
+                        return true
+                    }
+                    return false
+                }
+
+            if let firstClassDeclarationItemResults = firstClassDeclarationItemResults {
+                if case let .classDeclarationItem /* I already checked this first bit above, sigh */ (.member(syntax)) =
+                    firstClassDeclarationItemResults.element
+                {
+                    var newSyntax = syntax
+                    newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
+                        .leadingTrivia!
+                    transformationResult
+                        .items[firstClassDeclarationItemResults.offset] =
+                        .classDeclarationItem(.member(newSyntax))
+                }
+
+                // TODO: should we like check that replacementContents is empty here?
+                transformationResult.items = itemsWithoutReplacementContents(transformationResult)
+            }
         }
 
         return transformationResult
