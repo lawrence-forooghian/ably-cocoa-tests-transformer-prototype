@@ -45,9 +45,14 @@ struct ASTTransform {
                 )
             } else {
                 if !contentsTransformationResult.replacementContents.isEmpty {
-                    fatalError("Transformation of `spec` gave replacementContents; don’t know what to do with them")
+                    contentsTransformationResult.replacementContents.forEach { item in
+                        print(item.syntax)
+                    }
+                    fatalError(
+                        "Transformation of `spec` gave replacementContents; don’t know what to do with them: \(contentsTransformationResult.replacementContents.map(\.syntax.syntaxNodeType))"
+                    )
                 }
-                
+
                 return .init(
                     replacementItems: contentsTransformationResult.classDeclarationItems,
                     globalDeclarations: contentsTransformationResult.globalDeclarations
@@ -159,6 +164,8 @@ struct ASTTransform {
 
         // Now we update the function declaration of newReusableTestsDecl
         // to insert calls to the test functions.
+        let newReusableTestsDecl = reusableTestsDecl
+            .replacingContents(with: transformationResult.replacementContents)
         var newFunctionDeclaration = newReusableTestsDecl.syntax
 
         // TODO: should we stick some logging into these test functions or something?
