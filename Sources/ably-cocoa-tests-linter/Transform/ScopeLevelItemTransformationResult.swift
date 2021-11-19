@@ -5,6 +5,7 @@ extension ASTTransform {
         enum Item {
             struct ReplacementItem {
                 var item: AST.ScopeLevel.Item
+                var canLiftToHigherScope: Bool
                 var classLevelFallback: AST.ClassDeclaration.Item?
             }
 
@@ -68,10 +69,11 @@ extension ASTTransform.ScopeLevelItemTransformationResult {
 
     init(
         replacementItem: AST.ScopeLevel.Item,
+        canLiftToHigherScope: Bool = false,
         classLevelFallback: AST.ClassDeclaration.Item? = nil
     ) {
         self.init(
-            items: [.replacementItem(.init(item: replacementItem,
+            items: [.replacementItem(.init(item: replacementItem, canLiftToHigherScope: canLiftToHigherScope,
                                            classLevelFallback: classLevelFallback))]
         )
     }
