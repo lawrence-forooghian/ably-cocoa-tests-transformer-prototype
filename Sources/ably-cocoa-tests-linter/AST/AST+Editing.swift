@@ -29,17 +29,18 @@ extension AST.ClassDeclaration {
     }
 }
 
-private func makeCodeBlockItemList(forContents contents: [AST.ScopeLevel.Item])
+private func makeCodeBlockItemList(forContents contents: [ASTTransform
+        .ScopeLevelItemTransformationResult.Item.ReplacementItem])
     -> CodeBlockItemListSyntax
 {
     return SyntaxFactory.makeCodeBlockItemList(contents.map { item in
-        SyntaxFactory.makeCodeBlockItem(item: item.syntax, semicolon: nil, errorTokens: nil)
+        SyntaxFactory.makeCodeBlockItem(item: item.item.syntax, semicolon: nil, errorTokens: nil)
     })
 }
 
 private func replaceContents(
     ofFunctionDecl functionDecl: FunctionDeclSyntax,
-    with newContents: [AST.ScopeLevel.Item]
+    with newContents: [ASTTransform.ScopeLevelItemTransformationResult.Item.ReplacementItem]
 ) -> FunctionDeclSyntax {
     // Fix up the syntax
     let newStatements = makeCodeBlockItemList(forContents: newContents)
@@ -52,10 +53,12 @@ private func replaceContents(
 }
 
 extension AST.ScopeLevel.Spec {
-    func replacingContents(with newContents: [AST.ScopeLevel.Item]) -> Self {
+    func replacingContents(with newContents: [ASTTransform.ScopeLevelItemTransformationResult.Item
+            .ReplacementItem]) -> Self
+    {
         var result = self
 
-        result.contents = newContents
+        result.contents = newContents.map(\.item)
         result.syntax
             .decl =
             DeclSyntax(replaceContents(ofFunctionDecl: functionDeclaration, with: newContents))
@@ -65,10 +68,12 @@ extension AST.ScopeLevel.Spec {
 }
 
 extension AST.ScopeLevel.DescribeOrContext {
-    func replacingContents(with newContents: [AST.ScopeLevel.Item]) -> Self {
+    func replacingContents(with newContents: [ASTTransform.ScopeLevelItemTransformationResult.Item
+            .ReplacementItem]) -> Self
+    {
         var result = self
 
-        result.contents = newContents
+        result.contents = newContents.map(\.item)
 
         // Fix up the syntax
         // TODO: I've already unwrapped this once when parsing, would be nice to not again
@@ -79,10 +84,12 @@ extension AST.ScopeLevel.DescribeOrContext {
 }
 
 extension AST.ScopeLevel.ReusableTestsDeclaration {
-    func replacingContents(with newContents: [AST.ScopeLevel.Item]) -> Self {
+    func replacingContents(with newContents: [ASTTransform.ScopeLevelItemTransformationResult.Item
+            .ReplacementItem]) -> Self
+    {
         var result = self
 
-        result.contents = newContents
+        result.contents = newContents.map(\.item)
         result.syntax = replaceContents(ofFunctionDecl: syntax, with: newContents)
 
         return result

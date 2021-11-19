@@ -2,25 +2,59 @@ import SwiftSyntax
 
 extension ASTTransform {
     struct ScopeLevelItemTransformationResult {
-        var replacementContents: [AST.ScopeLevel.Item]
-        var globalDeclarations: [DeclSyntax]
-        var classDeclarationItems: [AST.ClassDeclaration.Item]
+        enum Item {
+            struct ReplacementItem {
+                var item: AST.ScopeLevel.Item
+                var classLevelFallback: AST.ClassDeclaration.Item?
+            }
+
+            case replacementItem(ReplacementItem)
+            case globalDeclaration(DeclSyntax)
+            case classDeclarationItem(AST.ClassDeclaration.Item)
+        }
+
+        var items: [Item]
 
         static let empty = Self(
-            replacementContents: [],
-            globalDeclarations: [],
-            classDeclarationItems: []
+            items: []
         )
 
         func appending(_ other: ScopeLevelItemTransformationResult)
             -> ScopeLevelItemTransformationResult
         {
             var result = self
-            result.replacementContents += other.replacementContents
-            result.globalDeclarations += other.globalDeclarations
-            result.classDeclarationItems += other.classDeclarationItems
-
+            result.items += other.items
             return result
+        }
+
+        var replacementContents: [Item.ReplacementItem] {
+            return items.compactMap { item in
+                if case let .replacementItem(replacementItem) = item {
+                    return replacementItem
+                } else {
+                    return nil
+                }
+            }
+        }
+
+        var globalDeclarations: [DeclSyntax] {
+            return items.compactMap { item in
+                if case let .globalDeclaration(decl) = item {
+                    return decl
+                } else {
+                    return nil
+                }
+            }
+        }
+
+        var classDeclarationItems: [AST.ClassDeclaration.Item] {
+            return items.compactMap { item in
+                if case let .classDeclarationItem(classDeclItem) = item {
+                    return classDeclItem
+                } else {
+                    return nil
+                }
+            }
         }
     }
 }
@@ -28,33 +62,37 @@ extension ASTTransform {
 extension ASTTransform.ScopeLevelItemTransformationResult {
     init(classDeclarationItem: AST.ClassDeclaration.Item) {
         self.init(
-            replacementContents: [],
-            globalDeclarations: [],
-            classDeclarationItems: [classDeclarationItem]
+            items: [.classDeclarationItem(classDeclarationItem)]
         )
     }
 
-    init(replacementItem: AST.ScopeLevel.Item) {
+    init(
+        replacementItem: AST.ScopeLevel.Item,
+        classLevelFallback: AST.ClassDeclaration.Item? = nil
+    ) {
         self.init(
-            replacementContents: [replacementItem],
-            globalDeclarations: [],
-            classDeclarationItems: []
+            items: [.replacementItem(.init(item: replacementItem,
+                                           classLevelFallback: classLevelFallback))]
         )
     }
 
     init<T: DeclSyntaxProtocol>(classLevelDeclaration: T) {
-        let member = MemberDeclListItemSyntax { builder in
-            let syntax = DeclSyntax(classLevelDeclaration)
-            builder.useDecl(syntax)
-        }
-        self.init(classDeclarationItem: .member(member))
+        self.init(classDeclarationItem: .init(decl: classLevelDeclaration))
     }
 
     init<T: DeclSyntaxProtocol>(globalDeclaration: T) {
         self.init(
-            replacementContents: [],
-            globalDeclarations: [DeclSyntax(globalDeclaration)],
-            classDeclarationItems: []
+            items: [.globalDeclaration(DeclSyntax(globalDeclaration))]
         )
+    }
+}
+
+extension AST.ClassDeclaration.Item {
+    init<T: DeclSyntaxProtocol>(decl: T) {
+        let member = MemberDeclListItemSyntax { builder in
+            let syntax = DeclSyntax(decl)
+            builder.useDecl(syntax)
+        }
+        self = .member(member)
     }
 }

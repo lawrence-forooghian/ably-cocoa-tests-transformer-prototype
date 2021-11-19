@@ -1,11 +1,6 @@
 import SwiftSyntax
 
 struct ASTTransform {
-    struct ClassTransformationResult {
-        var globalDeclarations: [DeclSyntax]
-        var classDeclaration: AST.ClassDeclaration
-    }
-
     var options: TransformQuickSpec.Options
 
     func transformClassDeclaration(_ classDeclaration: AST.ClassDeclaration)
@@ -28,7 +23,7 @@ struct ASTTransform {
 
         switch item {
         case .member:
-            return .init(replacementItems: [item], globalDeclarations: [])
+            return .init(items: [.replacementItem(item)])
         case let .spec(spec):
             let contentsTransformationResult = transformContents(
                 spec.contents,
@@ -38,25 +33,31 @@ struct ASTTransform {
             if options.onlyLocalsToGlobals {
                 let newSpec = spec
                     .replacingContents(with: contentsTransformationResult.replacementContents)
-                return .init(
-                    replacementItems: contentsTransformationResult
-                        .classDeclarationItems + [.spec(newSpec)],
-                    globalDeclarations: contentsTransformationResult.globalDeclarations
-                )
-            } else {
-                if !contentsTransformationResult.replacementContents.isEmpty {
-                    contentsTransformationResult.replacementContents.forEach { item in
-                        print(item.syntax)
+                let classItems = contentsTransformationResult.items
+                    .compactMap { item -> ClassDeclarationItemTransformationResult.Item? in
+                        switch item {
+                        case .replacementItem: return nil // handled in replacingContents above
+                        case let .classDeclarationItem(item): return .replacementItem(item)
+                        case let .globalDeclaration(decl): return .globalDeclaration(decl)
+                        }
                     }
-                    fatalError(
-                        "Transformation of `spec` gave replacementContents; don’t know what to do with them: \(contentsTransformationResult.replacementContents.map(\.syntax.syntaxNodeType))"
-                    )
-                }
-
-                return .init(
-                    replacementItems: contentsTransformationResult.classDeclarationItems,
-                    globalDeclarations: contentsTransformationResult.globalDeclarations
-                )
+                return .init(items: classItems + [.replacementItem(.spec(newSpec))])
+            } else {
+                let classItems = contentsTransformationResult.items
+                    .compactMap { item -> ClassDeclarationItemTransformationResult.Item? in
+                        switch item {
+                        case let .replacementItem(item):
+                            if let classLevelFallback = item.classLevelFallback {
+                                return .replacementItem(classLevelFallback)
+                            }
+                            fatalError(
+                                "Transformation of `spec` gave replacementItem without a classLevelFallback; don’t know what to do with it"
+                            )
+                        case let .classDeclarationItem(item): return .replacementItem(item)
+                        case let .globalDeclaration(decl): return .globalDeclaration(decl)
+                        }
+                    }
+                return .init(items: classItems)
             }
         }
     }
@@ -126,7 +127,7 @@ struct ASTTransform {
         // but we could probably just improve things to make it tell us that
         let testFunctionDeclarations = transformationResult.replacementContents
             .compactMap { item -> FunctionDeclSyntax? in
-                guard case let .functionDeclaration(functionDeclaration) = item else {
+                guard case let .functionDeclaration(functionDeclaration) = item.item else {
                     return nil
                 }
                 if !functionDeclaration.identifier.text.starts(with: "test") {
@@ -181,12 +182,12 @@ struct ASTTransform {
                     .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
         }
 
-        var newTransformationResult = transformationResult
-        newTransformationResult
-            .classDeclarationItems =
-            ScopeLevelItemTransformationResult(classLevelDeclaration: newFunctionDeclaration)
-                .classDeclarationItems
-        return newTransformationResult
+        // TODO: we should probably still make use of the transformationResult, in case it spat out globals/members
+        // (although I know it didn't)
+        return .init(
+            replacementItem: .functionDeclaration(newFunctionDeclaration),
+            classLevelFallback: .init(decl: newFunctionDeclaration)
+        )
     }
 
     private func transformDescribeOrContext(
@@ -199,23 +200,37 @@ struct ASTTransform {
                 .appending(AST.ScopeLevel.describeOrContext(describeOrContext))
         )
 
+        let itemsWithoutReplacementContents = transformationResult.items.filter { item in
+            if case .replacementItem = item {
+                return false
+            } else {
+                return true
+            }
+        }
+
         if options.onlyLocalsToGlobals {
             let newDescribeOrContext = describeOrContext
                 .replacingContents(with: transformationResult.replacementContents)
-            transformationResult.replacementContents = [.describeOrContext(newDescribeOrContext)]
+            // TODO: this could be neater; we probably should have kept globalVariables separate from the other two
+
+            transformationResult
+                .items = itemsWithoutReplacementContents +
+                [.replacementItem(.init(item: .describeOrContext(newDescribeOrContext)))]
         } else {
-            if !transformationResult.classDeclarationItems.isEmpty {
-                // preserve any comments that came alongside the function call
-                // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
-                // and a bunch of unwanted whitespace
-                if case let .member(syntax) = transformationResult.classDeclarationItems[0] {
-                    var newSyntax = syntax
-                    newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
-                        .leadingTrivia!
-                    transformationResult.classDeclarationItems[0] = .member(newSyntax)
-                }
-            }
-            transformationResult.replacementContents = []
+            // TODO: restore
+//            if !transformationResult.classDeclarationItems.isEmpty {
+//                // preserve any comments that came alongside the function call
+//                // TODO: it's a bit messed up though, see e.g. "32 bytes" comment
+//                // and a bunch of unwanted whitespace
+//                if case let .member(syntax) = transformationResult.classDeclarationItems[0] {
+//                    var newSyntax = syntax
+//                    newSyntax.leadingTrivia = describeOrContext.syntax.leadingTrivia! + newSyntax
+//                        .leadingTrivia!
+//                    transformationResult.classDeclarationItems[0] = .member(newSyntax)
+//                }
+//            }
+            // TODO: should we like check that replacementContents is empty here?
+            transformationResult.items = itemsWithoutReplacementContents
         }
 
         return transformationResult
