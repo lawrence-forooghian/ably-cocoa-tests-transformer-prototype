@@ -189,12 +189,11 @@ struct ASTTransform {
                     .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
         }
 
-        // TODO: similarly to the test function invocations, there's nothing in the AST to indicate that this is now a "transformed" reusableTests declaration (with context arg).
-        newReusableTestsDecl.syntax = newFunctionDeclaration
-
         var newTransformationResult = transformationResult
         newTransformationResult
-            .replacementContents = [.reusableTestsDeclaration(newReusableTestsDecl)]
+            .classDeclarationItems =
+            ScopeLevelItemTransformationResult(classLevelDeclaration: newFunctionDeclaration)
+                .classDeclarationItems
         return newTransformationResult
     }
 
@@ -405,7 +404,11 @@ struct ASTTransform {
         ).withLeadingTrivia(it.syntax.leadingTrivia!)
             .withTrailingTrivia(it.syntax.trailingTrivia!)
 
-        return .init(classLevelDeclaration: testFunctionDeclaration)
+        if scope.isReusableTests {
+            return .init(replacementItem: .functionDeclaration(testFunctionDeclaration))
+        } else {
+            return .init(classLevelDeclaration: testFunctionDeclaration)
+        }
     }
 
     private func transformHook(
@@ -577,6 +580,10 @@ struct ASTTransform {
         ).withLeadingTrivia(hook.syntax.leadingTrivia!)
             .withTrailingTrivia(hook.syntax.trailingTrivia!)
 
-        return .init(classLevelDeclaration: hookFunctionDeclaration)
+        if scope.isReusableTests {
+            return .init(replacementItem: .functionDeclaration(hookFunctionDeclaration))
+        } else {
+            return .init(classLevelDeclaration: hookFunctionDeclaration)
+        }
     }
 }
