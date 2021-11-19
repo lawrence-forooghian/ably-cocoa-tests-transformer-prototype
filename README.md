@@ -9,3 +9,5 @@ Usage:
 ```
 swift run ably-cocoa-tests-linter /Users/lawrence/code/ably/ably-cocoa/Spec/
 ```
+
+Run with the `--help` flag for information on accepted flags.
