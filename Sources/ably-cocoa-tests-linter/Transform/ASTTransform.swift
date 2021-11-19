@@ -183,9 +183,11 @@ struct ASTTransform {
                 .appending(item)
         }
 
-        newFunctionDeclaration =
-            SyntaxManipulationHelpers
-                .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
+        if !options.onlyLocalsToGlobals {
+            newFunctionDeclaration =
+                SyntaxManipulationHelpers
+                    .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
+        }
 
         // TODO: similarly to the test function invocations, there's nothing in the AST to indicate that this is now a "transformed" reusableTests declaration (with context arg).
         newReusableTestsDecl.syntax = newFunctionDeclaration
