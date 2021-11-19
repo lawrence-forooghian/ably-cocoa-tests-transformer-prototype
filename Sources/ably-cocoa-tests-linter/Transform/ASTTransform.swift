@@ -44,6 +44,10 @@ struct ASTTransform {
                     globalDeclarations: contentsTransformationResult.globalDeclarations
                 )
             } else {
+                if !contentsTransformationResult.replacementContents.isEmpty {
+                    fatalError("Transformation of `spec` gave replacementContents; don’t know what to do with them")
+                }
+                
                 return .init(
                     replacementItems: contentsTransformationResult.classDeclarationItems,
                     globalDeclarations: contentsTransformationResult.globalDeclarations
@@ -112,25 +116,6 @@ struct ASTTransform {
             immediatelyInsideScope: .init(topLevel: .reusableTestsDeclaration(reusableTestsDecl))
         )
 
-        // TODO: OK, so the problem here is that the thing for transforming an `it` doesn't know that it needs to be placed at either scope level or class level depending on whether it's in reusable tests. So let's push that logic up into transformContents as we did for variables / functions.
-
-        // TODO: this should probably also be encapsulated into a SyntaxManipulationHelpers function
-
-        var newReusableTestsDecl = reusableTestsDecl
-            .replacingContents(with: transformationResult.replacementContents)
-
-        /*
-
-         // TODO: this is also probably hacky - we're taking a bunch of class member items and turning them back into just declarations. Not necessary
-         let codeBlockItemsFromFunction = classDeclarationItems.map { classDeclarationItem in
-             SyntaxFactory.makeCodeBlockItem(
-                 item: Syntax(classDeclarationItem.syntax.decl),
-                 semicolon: nil,
-                 errorTokens: nil
-             )
-         }
-          */
-
         // TODO: this is a bit hacky – we're essentially figuring out which
         // test methods were created by transformSpecFunctionDeclarationIntoClassLevelDeclarations
         // but we could probably just improve things to make it tell us that
@@ -173,7 +158,7 @@ struct ASTTransform {
             }
 
         // Now we update the function declaration of newReusableTestsDecl
-        // to insert calls to the
+        // to insert calls to the test functions.
         var newFunctionDeclaration = newReusableTestsDecl.syntax
 
         // TODO: should we stick some logging into these test functions or something?
