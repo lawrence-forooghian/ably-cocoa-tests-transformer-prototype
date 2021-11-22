@@ -1,8 +1,8 @@
 extension AST.ScopeLevel {
-    var methodNameComponent: String {
+    var methodNameComponent: String? {
         switch self {
-        case .spec: return ""
-        case .reusableTestsDeclaration: return ""
+        case .spec: return nil
+        case .reusableTestsDeclaration: return nil
         case let .describeOrContext(describeOrContext): return describeOrContext.description
         }
     }

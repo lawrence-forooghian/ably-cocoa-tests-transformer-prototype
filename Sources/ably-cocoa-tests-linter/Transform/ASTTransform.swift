@@ -201,10 +201,9 @@ struct ASTTransform {
                 .appending(AST.ScopeLevel.describeOrContext(describeOrContext))
         )
 
-
         if options.onlyLocalsToGlobals {
             let itemsWithoutReplacementContents = { (result: ScopeLevelItemTransformationResult) in
-                return result.items.filter { item in
+                result.items.filter { item in
                     if case .replacementItem = item {
                         return false
                     } else {
@@ -212,16 +211,17 @@ struct ASTTransform {
                     }
                 }
             }
-            
+
             let newDescribeOrContext = describeOrContext
                 .replacingContents(with: transformationResult.replacementContents)
             // TODO: this could be neater; we probably should have kept globalVariables separate from the other two
 
             transformationResult
                 .items = itemsWithoutReplacementContents(transformationResult) +
-            [.replacementItem(.init(item: .describeOrContext(newDescribeOrContext), canLiftToHigherScope: false))]
+                [.replacementItem(.init(item: .describeOrContext(newDescribeOrContext),
+                                        canLiftToHigherScope: false))]
         } else {
-            // TODO This is so clunky, interacting with this transformationResult.items
+            // TODO: This is so clunky, interacting with this transformationResult.items
             let firstClassDeclarationItemResults = transformationResult.items.enumerated()
                 .first { item in
                     if case .classDeclarationItem = item.element {
@@ -241,10 +241,14 @@ struct ASTTransform {
                         .items[firstClassDeclarationItemResults.offset] =
                         .classDeclarationItem(.member(newSyntax))
                 }
-                
-                let unliftableReplacementContents = transformationResult.replacementContents.filter { !$0.canLiftToHigherScope }
-                
-                precondition(unliftableReplacementContents.isEmpty, "I expect unliftableReplacementContents to be empty when replacing a describeOrContext, but it contains \(unliftableReplacementContents)")
+
+                let unliftableReplacementContents = transformationResult.replacementContents
+                    .filter { !$0.canLiftToHigherScope }
+
+                precondition(
+                    unliftableReplacementContents.isEmpty,
+                    "I expect unliftableReplacementContents to be empty when replacing a describeOrContext, but it contains \(unliftableReplacementContents)"
+                )
             }
         }
 

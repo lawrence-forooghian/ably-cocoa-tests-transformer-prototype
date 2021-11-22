@@ -41,28 +41,31 @@ enum QuickSpecMethodCall {
     }
 
     func outputFunctionName(inScope scope: AST.Scope) -> String {
-        let unsanitisedComponents: [String] = {
+        // The aim is to reproduce the naming logic used by Quick, so we
+        // can easily compare test order for debugging.
+        var unsanitisedComponents: [String] = {
             switch self {
-            case .hook(.beforeEach),
-                 .hook(.afterEach): return [description] + scope.levels
-                .map(\.methodNameComponent)
-            case .it: return scope.levels.map(\.methodNameComponent) + [description]
+            case .hook(.beforeEach), .hook(.afterEach):
+                return [description].compactMap { $0 } + scope.levels.map(\.methodNameComponent)
+                    .compactMap { $0 }
+            case .it:
+                return scope.levels.map(\.methodNameComponent).compactMap { $0 } + [description]
+                    .compactMap { $0 }
             }
         }()
 
-        let unsanitisedName =
-            ((!generatesTestMethod || unsanitisedComponents[0].starts(with: "test")) ? "" :
-                "test") + unsanitisedComponents.joined(separator: "_")
+        if generatesTestMethod {
+            unsanitisedComponents.insert("test", at: 0)
+        }
 
-        let withoutSymbols = unsanitisedName
-            .components(separatedBy: CharacterSet.symbols
-                .union(CharacterSet.punctuationCharacters)).joined(separator: "_")
-        let withoutWhitespace = withoutSymbols.components(separatedBy: CharacterSet.whitespaces)
-            .joined(separator: "_")
+        if isSkipped || scope.isSkipped {
+            unsanitisedComponents.insert("skipped", at: 0)
+        }
 
-        // TODO: iterate on this, probably want some camelCase instead of underscores, and to be more clever when we have a `describe` that matches the test class name
+        // This the joining logic used in Quick@c81db82, Example.swift#name
+        let unsanitisedName = unsanitisedComponents.joined(separator: ", ")
 
-        return (isSkipped || scope.isSkipped ? "skipped_" : "") + withoutWhitespace
+        return unsanitisedName.c99ExtendedIdentifier
     }
 
     // TODO: can probably integrate this better with the class
@@ -95,5 +98,35 @@ enum QuickSpecMethodCall {
         let testDescription = firstSegment.firstToken!.text
 
         return testDescription
+    }
+}
+
+// This is copied from Quick@c81db82, file String+C99ExtendedIdentifier.swift
+// TODO: check attribution requirements
+extension String {
+    private static var invalidCharacters: CharacterSet = {
+        var invalidCharacters = CharacterSet()
+
+        let invalidCharacterSets: [CharacterSet] = [
+            .whitespacesAndNewlines,
+            .illegalCharacters,
+            .controlCharacters,
+            .punctuationCharacters,
+            .nonBaseCharacters,
+            .symbols,
+        ]
+
+        for invalidSet in invalidCharacterSets {
+            invalidCharacters.formUnion(invalidSet)
+        }
+
+        return invalidCharacters
+    }()
+
+    internal var c99ExtendedIdentifier: String {
+        let validComponents = components(separatedBy: String.invalidCharacters)
+        let result = validComponents.joined(separator: "_")
+
+        return result.isEmpty ? "_" : result
     }
 }

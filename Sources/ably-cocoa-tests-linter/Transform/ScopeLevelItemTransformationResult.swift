@@ -73,7 +73,8 @@ extension ASTTransform.ScopeLevelItemTransformationResult {
         classLevelFallback: AST.ClassDeclaration.Item? = nil
     ) {
         self.init(
-            items: [.replacementItem(.init(item: replacementItem, canLiftToHigherScope: canLiftToHigherScope,
+            items: [.replacementItem(.init(item: replacementItem,
+                                           canLiftToHigherScope: canLiftToHigherScope,
                                            classLevelFallback: classLevelFallback))]
         )
     }
