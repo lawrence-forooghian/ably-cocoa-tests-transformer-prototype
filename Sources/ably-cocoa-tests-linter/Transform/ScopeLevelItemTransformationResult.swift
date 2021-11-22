@@ -74,6 +74,38 @@ extension ASTTransform {
                     return functionDeclaration
                 }
         }
+
+        struct ReusableTestCaseEnum {
+            struct Case {
+                var functionName: String
+
+                var name: String {
+                    // strip "test__" prefix
+                    return functionName.replacingCharacters(
+                        in: functionName.startIndex ..< functionName
+                            .index(functionName.startIndex, offsetBy: "test__".count),
+                        with: ""
+                    )
+                }
+            }
+
+            var functionName: String
+            var cases: [Case]
+
+            var name: String {
+                return "TestCase_\(functionName.prefix(1).uppercased() + functionName.dropFirst())"
+            }
+        }
+
+        func reusableTestCaseEnum(for reusableTestsDeclaration: AST.ScopeLevel
+            .ReusableTestsDeclaration) -> ReusableTestCaseEnum
+        {
+            let cases = testFunctionDeclarations.map { declaration in
+                ReusableTestCaseEnum.Case(functionName: declaration.identifier.text)
+            }
+
+            return .init(functionName: reusableTestsDeclaration.functionName, cases: cases)
+        }
     }
 }
 

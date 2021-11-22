@@ -122,45 +122,29 @@ struct ASTTransform {
             immediatelyInsideScope: .init(topLevel: .reusableTestsDeclaration(reusableTestsDecl))
         )
 
-        // We now invoke all of these functions.
-        // TODO: how will we represent that in our AST? They're just random function calls. That's a pain. Maybe we'll just not represent them in the AST and only in the syntax... OK, yeah, we'll do that for now. But it's a bit dodgy
-        let testFunctionInvocationCodeBlockItems = transformationResult.testFunctionDeclarations.map { declaration -> CodeBlockItemSyntax in
-                let testFunctionInvocationExpression = SyntaxFactory
-                    .makeFunctionCallExpr(
-                        calledExpression: ExprSyntax(SyntaxFactory
-                            .makeIdentifierExpr(
-                                identifier: declaration
-                                    .identifier,
-                                declNameArguments: nil
-                            )),
-                        leftParen: SyntaxFactory.makeLeftParenToken(),
-                        argumentList: SyntaxFactory.makeBlankTupleExprElementList(),
-                        rightParen: SyntaxFactory.makeRightParenToken(),
-                        trailingClosure: nil,
-                        additionalTrailingClosures: nil
-                    ).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+        // We now add the switch statement which invokes one
+        // of these functions depending on which `testCase` argument was passed.
+        let reusableTestCaseEnum = transformationResult.reusableTestCaseEnum(for: reusableTestsDecl)
+        let switchStatement = SyntaxManipulationHelpers
+            .makeReusableTestCaseInvocationSwitchStatement(fromEnum: reusableTestCaseEnum)
+        let switchStatementCodeBlockItem = SyntaxFactory.makeCodeBlockItem(
+            item: Syntax(switchStatement),
+            semicolon: nil,
+            errorTokens: nil
+        )
 
-                return SyntaxFactory.makeCodeBlockItem(
-                    item: Syntax(testFunctionInvocationExpression),
-                    semicolon: nil,
-                    errorTokens: nil
-                )
-            }
-
-        // Now we update the function declaration of newReusableTestsDecl
-        // to insert calls to the test functions.
         let newReusableTestsDecl = reusableTestsDecl
             .replacingContents(with: transformationResult.replacementContents)
         var newFunctionDeclaration = newReusableTestsDecl.syntax
-
-        // TODO: should we stick some logging into these test functions or something?
-
-        testFunctionInvocationCodeBlockItems.forEach { item in
-            newFunctionDeclaration.body!.statements = newFunctionDeclaration.body!.statements
-                .appending(item)
-        }
+        newFunctionDeclaration.body!.statements = newFunctionDeclaration.body!.statements
+            .appending(switchStatementCodeBlockItem)
 
         if !options.onlyLocalsToGlobals {
+            newFunctionDeclaration = SyntaxManipulationHelpers
+                .addingTestCaseArgumentToReusableTestsFunctionDeclaration(
+                    newFunctionDeclaration,
+                    testCaseEnum: reusableTestCaseEnum
+                )
             newFunctionDeclaration =
                 SyntaxManipulationHelpers
                     .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)

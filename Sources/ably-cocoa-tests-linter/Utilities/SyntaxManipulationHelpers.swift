@@ -42,11 +42,10 @@ enum SyntaxManipulationHelpers {
         return modifiedToPrivateFunctionDeclaration.withModifiers(newModifiers)
     }
 
-    static func addingContextToReusableTestsFunctionDeclaration(_ decl: FunctionDeclSyntax)
-        -> FunctionDeclSyntax
-    {
-        // We add a `context: (beforeEach: () -> (), afterEach: () -> ())` arg to all these functions
-
+    static func addingParameterToReusableTestsFunctionDeclaration(
+        param: FunctionParameterSyntax,
+        decl: FunctionDeclSyntax
+    ) -> FunctionDeclSyntax {
         var parameterList = decl.signature.input.parameterList
 
         var hasTrailingClosure = false
@@ -89,6 +88,45 @@ enum SyntaxManipulationHelpers {
             )
         }
 
+        var newParam = param
+        newParam.trailingComma = hasTrailingClosure ? SyntaxFactory.makeCommaToken() : nil
+        parameterList = parameterList.inserting(
+            newParam,
+            at: hasTrailingClosure ? parameterList.count - 1 : parameterList.count
+        )
+
+        var newDecl = decl
+        newDecl.signature.input.parameterList = parameterList
+
+        return newDecl
+    }
+
+    static func addingTestCaseArgumentToReusableTestsFunctionDeclaration(
+        _ decl: FunctionDeclSyntax,
+        testCaseEnum: ASTTransform.ScopeLevelItemTransformationResult.ReusableTestCaseEnum
+    ) -> FunctionDeclSyntax {
+        // We add a `testCase: TestCase_ReusableTestsTestTokenRequestFromJson` param to the reusable tests
+        // declaration
+
+        let parameterType = SyntaxFactory.makeTypeIdentifier(testCaseEnum.name)
+        let parameter = SyntaxFactory.makeFunctionParameter(
+            attributes: nil,
+            firstName: SyntaxFactory.makeIdentifier("testCase"),
+            secondName: nil,
+            colon: SyntaxFactory.makeColonToken(),
+            type: parameterType,
+            ellipsis: nil,
+            defaultArgument: nil,
+            trailingComma: nil
+        )
+
+        return addingParameterToReusableTestsFunctionDeclaration(param: parameter, decl: decl)
+    }
+
+    static func addingContextToReusableTestsFunctionDeclaration(_ decl: FunctionDeclSyntax)
+        -> FunctionDeclSyntax
+    {
+        // We add a `context: (beforeEach: () -> (), afterEach: () -> ())` arg to all these functions
         let parameterType = SyntaxFactory
             .makeTypeIdentifier("(beforeEach: (() -> ())?, afterEach: (() -> ())?)")
         let parameter = SyntaxFactory.makeFunctionParameter(
@@ -99,17 +137,10 @@ enum SyntaxManipulationHelpers {
             type: parameterType,
             ellipsis: nil,
             defaultArgument: nil,
-            trailingComma: hasTrailingClosure ? SyntaxFactory.makeCommaToken() : nil
-        )
-        parameterList = parameterList.inserting(
-            parameter,
-            at: hasTrailingClosure ? parameterList.count - 1 : parameterList.count
+            trailingComma: nil
         )
 
-        var newDecl = decl
-        newDecl.signature.input.parameterList = parameterList
-
-        return newDecl
+        return addingParameterToReusableTestsFunctionDeclaration(param: parameter, decl: decl)
     }
 
     // TODO: these two that work with scope should be split between here and ASTTransform; just wanted them out of that class for now
@@ -198,6 +229,65 @@ enum SyntaxManipulationHelpers {
             leftParen: SyntaxFactory.makeLeftParenToken(),
             elementList: elementList,
             rightParen: SyntaxFactory.makeRightParenToken()
+        )
+    }
+
+    static func makeReusableTestCaseInvocationSwitchStatement(fromEnum reusableTestCaseEnum: ASTTransform
+        .ScopeLevelItemTransformationResult.ReusableTestCaseEnum) -> SwitchStmtSyntax
+    {
+        // TODO: how will we represent that in our AST? It's just a random switch statement. That's a pain. Maybe we'll just not represent them in the AST and only in the syntax... OK, yeah, we'll do that for now. But it's a bit dodgy
+
+        // switch-case → case-label statements
+        let caseListItems = reusableTestCaseEnum.cases.map { enumCase -> SwitchCaseSyntax in
+            let caseItem = SyntaxFactory.makeCaseItem(
+                pattern: PatternSyntax(SyntaxFactory.makeEnumCasePattern(
+                    type: nil,
+                    period: SyntaxFactory.makePeriodToken(),
+                    caseName: SyntaxFactory.makeIdentifier(enumCase.name),
+                    associatedTuple: nil
+                )),
+                whereClause: nil,
+                trailingComma: nil
+            )
+            let functionCallExpression = SyntaxFactory.makeFunctionCallExpr(
+                calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                    identifier: SyntaxFactory.makeIdentifier(enumCase.functionName),
+                    declNameArguments: nil
+                )),
+                leftParen: SyntaxFactory.makeLeftParenToken(),
+                argumentList: SyntaxFactory.makeBlankTupleExprElementList(),
+                rightParen: SyntaxFactory.makeRightParenToken(),
+                trailingClosure: nil,
+                additionalTrailingClosures: nil
+            ).withTrailingTrivia(.newlines(1))
+            return SyntaxFactory.makeSwitchCase(
+                unknownAttr: nil,
+                label: Syntax(SyntaxFactory
+                    .makeSwitchCaseLabel(caseKeyword: SyntaxFactory.makeCaseKeyword()
+                        .withTrailingTrivia(.spaces(1)),
+                        caseItems: SyntaxFactory.makeCaseItemList([caseItem]),
+                        colon: SyntaxFactory.makeColonToken())),
+                statements: SyntaxFactory.makeCodeBlockItemList([SyntaxFactory.makeCodeBlockItem(
+                    item: Syntax(functionCallExpression),
+                    semicolon: nil,
+                    errorTokens: nil
+                )])
+            )
+        }
+        let caseList = SyntaxFactory.makeSwitchCaseList(caseListItems.map { Syntax($0) })
+
+        return SyntaxFactory.makeSwitchStmt(
+            labelName: nil,
+            labelColon: nil,
+            switchKeyword: SyntaxFactory.makeSwitchKeyword().withLeadingTrivia(.newlines(1))
+                .withTrailingTrivia(.spaces(1)),
+            expression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                identifier: SyntaxFactory.makeIdentifier("testCase"),
+                declNameArguments: nil
+            )),
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+            cases: caseList,
+            rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
         )
     }
 }
