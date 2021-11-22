@@ -122,25 +122,9 @@ struct ASTTransform {
             immediatelyInsideScope: .init(topLevel: .reusableTestsDeclaration(reusableTestsDecl))
         )
 
-        // TODO: this is a bit hacky – we're essentially figuring out which
-        // test methods were created by transformSpecFunctionDeclarationIntoClassLevelDeclarations
-        // but we could probably just improve things to make it tell us that
-        let testFunctionDeclarations = transformationResult.replacementContents
-            .compactMap { item -> FunctionDeclSyntax? in
-                guard case let .functionDeclaration(functionDeclaration) = item.item else {
-                    return nil
-                }
-                if !functionDeclaration.identifier.text.starts(with: "test") {
-                    // TODO: should we handle skipped functions in some nicer way?
-                    return nil
-                }
-                return functionDeclaration
-            }
-
         // We now invoke all of these functions.
         // TODO: how will we represent that in our AST? They're just random function calls. That's a pain. Maybe we'll just not represent them in the AST and only in the syntax... OK, yeah, we'll do that for now. But it's a bit dodgy
-        let testFunctionInvocationCodeBlockItems = testFunctionDeclarations
-            .map { declaration -> CodeBlockItemSyntax in
+        let testFunctionInvocationCodeBlockItems = transformationResult.testFunctionDeclarations.map { declaration -> CodeBlockItemSyntax in
                 let testFunctionInvocationExpression = SyntaxFactory
                     .makeFunctionCallExpr(
                         calledExpression: ExprSyntax(SyntaxFactory

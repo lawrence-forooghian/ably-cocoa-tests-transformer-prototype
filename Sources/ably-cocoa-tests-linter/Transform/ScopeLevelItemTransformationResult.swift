@@ -57,6 +57,23 @@ extension ASTTransform {
                 }
             }
         }
+
+        var testFunctionDeclarations: [FunctionDeclSyntax] {
+            // TODO: this is a bit hacky – we're essentially figuring out which
+            // test methods were created by transformSpecFunctionDeclarationIntoClassLevelDeclarations
+            // but we could probably just improve things to make it tell us that
+            return replacementContents
+                .compactMap { item -> FunctionDeclSyntax? in
+                    guard case let .functionDeclaration(functionDeclaration) = item.item else {
+                        return nil
+                    }
+                    if !functionDeclaration.identifier.text.starts(with: "test") {
+                        // TODO: should we handle skipped functions in some nicer way?
+                        return nil
+                    }
+                    return functionDeclaration
+                }
+        }
     }
 }
 
