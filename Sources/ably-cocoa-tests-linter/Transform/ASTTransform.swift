@@ -125,21 +125,27 @@ struct ASTTransform {
         // TODO: this is a bit hacky – we're essentially figuring out which
         // test methods were created by transformSpecFunctionDeclarationIntoClassLevelDeclarations
         // but we could probably just improve things to make it tell us that
-        let testFunctionDeclarations = transformationResult.replacementContents
-            .compactMap { item -> FunctionDeclSyntax? in
+        let testFunctionDeclarationsWithIdentifier = transformationResult.replacementContents
+            .compactMap { item -> (identifier: String, declaration: FunctionDeclSyntax)? in
                 guard case let .functionDeclaration(functionDeclaration) = item.item else {
                     return nil
                 }
-                if !functionDeclaration.identifier.text.starts(with: "test") {
+                let identifier = functionDeclaration.identifier.text
+                if !identifier.starts(with: "test") {
                     // TODO: should we handle skipped functions in some nicer way?
                     return nil
                 }
-                return functionDeclaration
+                return (identifier, functionDeclaration)
             }
+        
+        // TODO more Swifty way of doing this? using a "comparator"?
+        let sortedTestFunctionDeclarations = testFunctionDeclarationsWithIdentifier.sorted { lhs, rhs in
+            lhs.identifier.caseInsensitiveCompare(rhs.identifier) == .orderedAscending
+        }.map(\.declaration)
 
         // We now invoke all of these functions.
         // TODO: how will we represent that in our AST? They're just random function calls. That's a pain. Maybe we'll just not represent them in the AST and only in the syntax... OK, yeah, we'll do that for now. But it's a bit dodgy
-        let testFunctionInvocationCodeBlockItems = testFunctionDeclarations
+        let testFunctionInvocationCodeBlockItems = sortedTestFunctionDeclarations
             .map { declaration -> CodeBlockItemSyntax in
                 let testFunctionInvocationExpression = SyntaxFactory
                     .makeFunctionCallExpr(
