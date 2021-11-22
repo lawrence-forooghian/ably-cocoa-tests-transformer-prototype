@@ -290,4 +290,44 @@ enum SyntaxManipulationHelpers {
             rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
         )
     }
+
+    static func makeEnumCaseDeclaration(fromCase reusableTestCaseEnumCase: ASTTransform
+        .ScopeLevelItemTransformationResult.ReusableTestCaseEnum.Case) -> EnumCaseDeclSyntax
+    {
+        return SyntaxFactory.makeEnumCaseDecl(
+            attributes: nil,
+            modifiers: nil,
+            caseKeyword: SyntaxFactory.makeCaseKeyword().withTrailingTrivia(.spaces(1)),
+            elements: SyntaxFactory.makeEnumCaseElementList([SyntaxFactory.makeEnumCaseElement(
+                identifier: SyntaxFactory.makeIdentifier(reusableTestCaseEnumCase.name),
+                associatedValue: nil,
+                rawValue: nil,
+                trailingComma: nil
+            )])
+        ).withTrailingTrivia(.newlines(1))
+    }
+
+    static func makeEnumDeclaration(fromEnum reusableTestCaseEnum: ASTTransform
+        .ScopeLevelItemTransformationResult.ReusableTestCaseEnum) -> EnumDeclSyntax
+    {
+        let members = SyntaxFactory.makeMemberDeclList(reusableTestCaseEnum.cases.map { enumCase in
+            let caseDecl = makeEnumCaseDeclaration(fromCase: enumCase)
+            return SyntaxFactory.makeMemberDeclListItem(decl: DeclSyntax(caseDecl), semicolon: nil)
+        })
+        let memberDeclBlock = SyntaxFactory.makeMemberDeclBlock(
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+            members: members,
+            rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
+        )
+        return SyntaxFactory.makeEnumDecl(
+            attributes: nil,
+            modifiers: nil,
+            enumKeyword: SyntaxFactory.makeEnumKeyword().withTrailingTrivia(.spaces(1)),
+            identifier: SyntaxFactory.makeIdentifier(reusableTestCaseEnum.name),
+            genericParameters: nil,
+            inheritanceClause: nil,
+            genericWhereClause: nil,
+            members: memberDeclBlock
+        ).withLeadingTrivia(.newlines(1))
+    }
 }

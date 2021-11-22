@@ -67,6 +67,10 @@ enum AST {
             case it(It)
             case reusableTestsCall(ReusableTestsCall)
             case hook(Hook)
+            // TODO: this is an escape valve for representing the results of a transformation
+            // that don't fit into the above cases. We should probably instead have a separate
+            // strongly-typed thing which represents the output
+            case arbitrarySyntax(Syntax)
 
             var syntax: Syntax {
                 switch self {
@@ -86,6 +90,8 @@ enum AST {
                     return Syntax(reusableTestsCall.syntax)
                 case let .hook(hook):
                     return Syntax(hook.syntax)
+                case let .arbitrarySyntax(syntax):
+                    return syntax
                 }
             }
         }

@@ -104,6 +104,8 @@ struct ASTTransform {
                 return transformReusableTestsCall(reusableTestsCall, insideScope: scope)
             case let .hook(hook):
                 return transformHook(hook, insideScope: scope)
+            case .arbitrarySyntax:
+                preconditionFailure("Not expecting to receive .arbitrarySyntax in input")
             }
         }
         .reduce(.empty) { $0.appending($1) }
@@ -150,12 +152,29 @@ struct ASTTransform {
                     .addingContextToReusableTestsFunctionDeclaration(newFunctionDeclaration)
         }
 
+        var items: [ScopeLevelItemTransformationResult.Item] = [
+            .replacementItem(.init(
+                item: .functionDeclaration(newFunctionDeclaration),
+                canLiftToHigherScope: true,
+                classLevelFallback: .init(decl: newFunctionDeclaration)
+            )),
+        ]
+
+        if !options.onlyLocalsToGlobals {
+            let enumDeclaration = SyntaxManipulationHelpers
+                .makeEnumDeclaration(fromEnum: reusableTestCaseEnum)
+            let item = ScopeLevelItemTransformationResult.Item.replacementItem(.init(
+                item: .arbitrarySyntax(Syntax(enumDeclaration)),
+                canLiftToHigherScope: true,
+                classLevelFallback: .init(decl: enumDeclaration)
+            ))
+            items.insert(item, at: 0)
+        }
+
         // TODO: we should probably still make use of the transformationResult, in case it spat out globals/members
         // (although I know it didn't)
         return .init(
-            replacementItem: .functionDeclaration(newFunctionDeclaration),
-            canLiftToHigherScope: true,
-            classLevelFallback: .init(decl: newFunctionDeclaration)
+            items: items
         )
     }
 
