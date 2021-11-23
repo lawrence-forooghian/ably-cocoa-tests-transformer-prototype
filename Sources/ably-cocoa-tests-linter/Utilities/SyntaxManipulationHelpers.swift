@@ -308,7 +308,7 @@ enum SyntaxManipulationHelpers {
                 identifier: SyntaxFactory.makeIdentifier("testCase").withTrailingTrivia(.spaces(1)),
                 declNameArguments: nil
             )),
-            leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withTrailingTrivia(.newlines(1)),
             cases: caseList,
             rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
         ).withLeadingTrivia(.newlines(2))
@@ -338,7 +338,7 @@ enum SyntaxManipulationHelpers {
             return SyntaxFactory.makeMemberDeclListItem(decl: DeclSyntax(caseDecl), semicolon: nil)
         })
         let memberDeclBlock = SyntaxFactory.makeMemberDeclBlock(
-            leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withTrailingTrivia(.newlines(1)),
             members: members,
             rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
         )
@@ -420,7 +420,7 @@ enum SyntaxManipulationHelpers {
             ),
             genericWhereClause: nil,
             body: SyntaxFactory.makeCodeBlock(
-                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)),
+                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withLeadingTrivia(.spaces(1)),
                 statements: statements,
                 rightBrace: SyntaxFactory.makeRightBraceToken()
             )
@@ -500,7 +500,7 @@ enum SyntaxManipulationHelpers {
             ),
             genericWhereClause: nil,
             body: SyntaxFactory.makeCodeBlock(
-                leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withTrailingTrivia(.newlines(1)),
                 statements: statements,
                 rightBrace: SyntaxFactory.makeRightBraceToken().withLeadingTrivia(.newlines(1))
             )
