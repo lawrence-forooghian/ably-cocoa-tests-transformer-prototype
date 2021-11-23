@@ -38,4 +38,21 @@ extension AST.ScopeLevel {
             return false
         }
     }
+
+    func findReusableTestsDeclaration(forCall reusableTestsCall: AST.ScopeLevel.Item
+        .ReusableTestsCall) -> AST.ScopeLevel.ReusableTestsDeclaration?
+    {
+        let found = contents.compactMap { item -> AST.ScopeLevel.ReusableTestsDeclaration? in
+            switch item {
+            case let .reusableTestsDeclaration(reusableTestsDeclaration)
+                where reusableTestsDeclaration.functionName == reusableTestsCall
+                .calledFunctionName: return reusableTestsDeclaration
+            default: return nil
+            }
+        }
+        if found.count > 1 {
+            fatalError("Found multiple reusable tests declarations for call, unexpected")
+        }
+        return found.first
+    }
 }

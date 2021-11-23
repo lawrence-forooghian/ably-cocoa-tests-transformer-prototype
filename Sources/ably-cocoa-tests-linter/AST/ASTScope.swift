@@ -54,5 +54,15 @@ extension AST {
                 }
             }
         }
+
+        func findReusableTestsDeclaration(forCall reusableTestsCall: AST.ScopeLevel.Item
+            .ReusableTestsCall) -> AST.ScopeLevel.ReusableTestsDeclaration?
+        {
+            if let foundAtTop = peek.findReusableTestsDeclaration(forCall: reusableTestsCall) {
+                return foundAtTop
+            }
+
+            return parent?.findReusableTestsDeclaration(forCall: reusableTestsCall)
+        }
     }
 }

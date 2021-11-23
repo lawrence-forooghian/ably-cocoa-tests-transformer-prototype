@@ -251,53 +251,45 @@ struct ASTTransform {
             return .init(replacementItem: .reusableTestsCall(reusableTestsCall))
         }
 
-        // this reusableTests* function call gets turned into a method
-        let methodName = QuickSpecMethodCall.it(
-            testDescription: reusableTestsCall.calledFunctionName,
-            skipped: false
-        )
-        .outputFunctionName(inScope: scope)
-
-        let newFunctionCallExpr = SyntaxManipulationHelpers.addContextToReusableTestsFunctionCall(
-            reusableTestsCall.syntax,
-            insideScope: scope
-        )
-
-        let codeBlockItem = SyntaxFactory.makeCodeBlockItem(
-            item: Syntax(newFunctionCallExpr),
-            semicolon: nil,
-            errorTokens: nil
-        )
-        let statements = SyntaxFactory.makeCodeBlockItemList([codeBlockItem])
-
-        let testFunctionDeclaration = SyntaxFactory.makeFunctionDecl(
-            attributes: nil,
-            modifiers: nil,
-            funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
-            identifier: SyntaxFactory.makeIdentifier(methodName),
-            genericParameterClause: nil,
-            signature: SyntaxFactory.makeFunctionSignature(
-                input: SyntaxFactory
-                    .makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(),
-                                         parameterList: SyntaxFactory
-                                             .makeBlankFunctionParameterList(
-                                             ),
-                                         rightParen: SyntaxFactory.makeRightParenToken()),
-                asyncOrReasyncKeyword: nil,
-                throwsOrRethrowsKeyword: nil,
-                output: nil
-            ),
-            genericWhereClause: nil,
-            body: SyntaxFactory.makeCodeBlock(
-                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)),
-                statements: statements,
-                rightBrace: SyntaxFactory.makeRightBraceToken()
+        guard let reusableTestsDeclaration = scope
+            .findReusableTestsDeclaration(forCall: reusableTestsCall)
+        else {
+            preconditionFailure(
+                "Failed to find reusable tests declaration for call \(reusableTestsCall)"
             )
-        ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
-            .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
+        }
+        let transformationResult = transformContents(
+            reusableTestsDeclaration.contents,
+            immediatelyInsideScope: .init(
+                topLevel: .reusableTestsDeclaration(reusableTestsDeclaration)
+            )
+        )
+
+        let reusableTestCaseEnum = transformationResult
+            .reusableTestCaseEnum(for: reusableTestsDeclaration)
+
+        // this reusableTests* function call gets turned into a method
+        let reusableTestsFunctionCallWrapperFunctionDeclaration = SyntaxManipulationHelpers
+            .makeReusableTestsFunctionCallWrapperFunctionDeclaration(
+                forCall: reusableTestsCall,
+                insideScope: scope,
+                reusableTestCaseEnum: reusableTestCaseEnum
+            )
+
+        let caseInvocationFunctionDeclarations = reusableTestCaseEnum.cases
+            .map { enumCase -> FunctionDeclSyntax in
+                SyntaxManipulationHelpers.makeCaseInvocationFunctionDeclaration(
+                    forCase: enumCase,
+                    call: reusableTestsCall,
+                    insideScope: scope
+                )
+            }
 
         // TODO: I guess technically it could be nested inside another reusable tests
-        return .init(classLevelDeclaration: testFunctionDeclaration)
+        return .init(items: [.classDeclarationItem(.init(decl: reusableTestsFunctionCallWrapperFunctionDeclaration))] +
+            caseInvocationFunctionDeclarations.map { decl in
+                .classDeclarationItem(.init(decl: decl))
+            })
     }
 
     private func transformIt(

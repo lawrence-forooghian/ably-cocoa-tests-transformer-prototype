@@ -145,12 +145,10 @@ enum SyntaxManipulationHelpers {
 
     // TODO: these two that work with scope should be split between here and ASTTransform; just wanted them out of that class for now
 
-    static func addContextToReusableTestsFunctionCall(
+    static func addingParameterToReusableTestsFunctionCall(
         _ functionCallExpr: FunctionCallExprSyntax,
-        insideScope scope: AST.Scope
-    )
-        -> FunctionCallExprSyntax
-    {
+        element: TupleExprElementSyntax
+    ) -> FunctionCallExprSyntax {
         var newFunctionCallExpr = functionCallExpr
 
         if newFunctionCallExpr.leftParen == nil {
@@ -172,13 +170,38 @@ enum SyntaxManipulationHelpers {
             newFunctionCallExpr.argumentList = newArgumentList
         }
 
-        newFunctionCallExpr = newFunctionCallExpr.addArgument(SyntaxFactory.makeTupleExprElement(
+        newFunctionCallExpr = newFunctionCallExpr.addArgument(element)
+        return newFunctionCallExpr
+    }
+
+    static func addContextToReusableTestsFunctionCall(
+        _ functionCallExpr: FunctionCallExprSyntax,
+        insideScope scope: AST.Scope
+    ) -> FunctionCallExprSyntax {
+        let contextParam = SyntaxFactory.makeTupleExprElement(
             label: SyntaxFactory.makeIdentifier("context"),
             colon: SyntaxFactory.makeColonToken(),
             expression: ExprSyntax(makeContextTupleExpr(insideScope: scope)),
             trailingComma: nil
-        ))
-        return newFunctionCallExpr
+        )
+
+        return addingParameterToReusableTestsFunctionCall(functionCallExpr, element: contextParam)
+    }
+
+    static func addTestCaseToReusableTestsFunctionCall(
+        _ functionCallExpr: FunctionCallExprSyntax
+    ) -> FunctionCallExprSyntax {
+        let testCaseParam = SyntaxFactory.makeTupleExprElement(
+            label: SyntaxFactory.makeIdentifier("testCase"),
+            colon: SyntaxFactory.makeColonToken(),
+            expression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                identifier: SyntaxFactory.makeIdentifier("testCase"),
+                declNameArguments: nil
+            )),
+            trailingComma: nil
+        )
+
+        return addingParameterToReusableTestsFunctionCall(functionCallExpr, element: testCaseParam)
     }
 
     static func makeContextTupleExpr(insideScope scope: AST.Scope) -> TupleExprSyntax {
@@ -329,5 +352,160 @@ enum SyntaxManipulationHelpers {
             genericWhereClause: nil,
             members: memberDeclBlock
         ).withLeadingTrivia(.newlines(1))
+    }
+
+    static func reusableTestsFunctionCallWrapperFunctionName(
+        forCall reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
+        insideScope scope: AST.Scope
+    ) -> String {
+        return QuickSpecMethodCall.it(
+            testDescription: reusableTestsCall.calledFunctionName,
+            skipped: false
+        ).outputFunctionName(inScope: scope)
+    }
+
+    static func makeReusableTestsFunctionCallWrapperFunctionDeclaration(
+        forCall reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
+        insideScope scope: AST.Scope,
+        reusableTestCaseEnum: ASTTransform.ScopeLevelItemTransformationResult.ReusableTestCaseEnum
+    ) -> FunctionDeclSyntax {
+        var newFunctionCallExpr = addTestCaseToReusableTestsFunctionCall(
+            reusableTestsCall.syntax
+        )
+
+        newFunctionCallExpr = addContextToReusableTestsFunctionCall(
+            newFunctionCallExpr,
+            insideScope: scope
+        )
+
+        let codeBlockItem = SyntaxFactory.makeCodeBlockItem(
+            item: Syntax(newFunctionCallExpr),
+            semicolon: nil,
+            errorTokens: nil
+        )
+        let statements = SyntaxFactory.makeCodeBlockItemList([codeBlockItem])
+
+        let parameterList = SyntaxFactory.makeFunctionParameterList([
+            SyntaxFactory.makeFunctionParameter(
+                attributes: nil,
+                firstName: SyntaxFactory.makeIdentifier("testCase"),
+                secondName: nil,
+                colon: SyntaxFactory.makeColonToken(),
+                type: SyntaxFactory.makeTypeIdentifier(reusableTestCaseEnum.name),
+                ellipsis: nil,
+                defaultArgument: nil,
+                trailingComma: nil
+            ),
+        ])
+
+        return SyntaxFactory.makeFunctionDecl(
+            attributes: nil,
+            modifiers: nil,
+            funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
+            identifier: SyntaxFactory
+                .makeIdentifier(
+                    reusableTestsFunctionCallWrapperFunctionName(forCall: reusableTestsCall,
+                                                                 insideScope: scope)
+                ),
+            genericParameterClause: nil,
+            signature: SyntaxFactory.makeFunctionSignature(
+                input: SyntaxFactory
+                    .makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(),
+                                         parameterList: parameterList,
+                                         rightParen: SyntaxFactory.makeRightParenToken()),
+                asyncOrReasyncKeyword: nil,
+                throwsOrRethrowsKeyword: nil,
+                output: nil
+            ),
+            genericWhereClause: nil,
+            body: SyntaxFactory.makeCodeBlock(
+                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)),
+                statements: statements,
+                rightBrace: SyntaxFactory.makeRightBraceToken()
+            )
+        ).withLeadingTrivia(newFunctionCallExpr.leadingTrivia!)
+            .withTrailingTrivia(newFunctionCallExpr.trailingTrivia!)
+    }
+
+    static func makeReusableTestsFunctionCallWrapperFunctionCallExpression(
+        forCall reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
+        insideScope scope: AST.Scope,
+        enumCase: ASTTransform.ScopeLevelItemTransformationResult.ReusableTestCaseEnum.Case
+    ) -> FunctionCallExprSyntax {
+        let invokedFunctionName = reusableTestsFunctionCallWrapperFunctionName(
+            forCall: reusableTestsCall,
+            insideScope: scope
+        )
+
+        let argumentList = SyntaxFactory.makeTupleExprElementList([
+            SyntaxFactory.makeTupleExprElement(
+                label: SyntaxFactory.makeIdentifier("testCase"),
+                colon: SyntaxFactory.makeColonToken(),
+                expression: ExprSyntax(SyntaxFactory.makeMemberAccessExpr(
+                    base: nil,
+                    dot: SyntaxFactory.makeIdentifier("."),
+                    name: SyntaxFactory.makeIdentifier(enumCase.name),
+                    declNameArguments: nil
+                )),
+                trailingComma: nil
+            ),
+        ])
+
+        return SyntaxFactory.makeFunctionCallExpr(
+            calledExpression: ExprSyntax(SyntaxFactory
+                .makeIdentifierExpr(identifier: SyntaxFactory.makeIdentifier(invokedFunctionName),
+                                    declNameArguments: nil)),
+            leftParen: SyntaxFactory.makeLeftParenToken(),
+            argumentList: argumentList,
+            rightParen: SyntaxFactory.makeRightParenToken(),
+            trailingClosure: nil,
+            additionalTrailingClosures: nil
+        )
+    }
+
+    static func makeCaseInvocationFunctionDeclaration(
+        forCase enumCase: ASTTransform.ScopeLevelItemTransformationResult.ReusableTestCaseEnum.Case,
+        call reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
+        insideScope scope: AST.Scope
+    ) -> FunctionDeclSyntax {
+        let codeBlockItem = SyntaxFactory.makeCodeBlockItem(
+            item: Syntax(makeReusableTestsFunctionCallWrapperFunctionCallExpression(
+                forCall: reusableTestsCall,
+                insideScope: scope,
+                enumCase: enumCase
+            )),
+            semicolon: nil,
+            errorTokens: nil
+        )
+        let statements = SyntaxFactory.makeCodeBlockItemList([codeBlockItem])
+
+        let functionName = QuickSpecMethodCall.it(testDescription: enumCase.name, skipped: false)
+            .outputFunctionName(inScope: scope)
+
+        return SyntaxFactory.makeFunctionDecl(
+            attributes: nil,
+            modifiers: nil,
+            funcKeyword: SyntaxFactory.makeFuncKeyword().withTrailingTrivia(.spaces(1)),
+            identifier: SyntaxFactory.makeIdentifier(functionName),
+            genericParameterClause: nil,
+            signature: SyntaxFactory.makeFunctionSignature(
+                input: SyntaxFactory
+                    .makeParameterClause(leftParen: SyntaxFactory.makeLeftParenToken(),
+                                         parameterList: SyntaxFactory
+                                             .makeBlankFunctionParameterList(
+                                             ),
+                                         rightParen: SyntaxFactory.makeRightParenToken()),
+                asyncOrReasyncKeyword: nil,
+                throwsOrRethrowsKeyword: nil,
+                output: nil
+            ),
+            genericWhereClause: nil,
+            body: SyntaxFactory.makeCodeBlock(
+                leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+                statements: statements,
+                rightBrace: SyntaxFactory.makeRightBraceToken().withLeadingTrivia(.newlines(1))
+            )
+        ).withLeadingTrivia(.newlines(1))
+            .withTrailingTrivia(.newlines(1))
     }
 }
