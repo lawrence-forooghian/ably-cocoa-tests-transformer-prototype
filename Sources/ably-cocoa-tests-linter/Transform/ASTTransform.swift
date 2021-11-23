@@ -559,8 +559,7 @@ class ASTTransform {
                         errorTokens: nil
                     ))
                 }
-
-                if scope.isReusableTests {
+                else if scope.isReusableTests {
                     let functionName = "context.beforeEach?"
 
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
@@ -613,8 +612,7 @@ class ASTTransform {
                             errorTokens: nil
                         ))
                 }
-
-                if scope.isReusableTests {
+                else if scope.isReusableTests {
                     let functionName = "context.afterEach?"
 
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(

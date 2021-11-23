@@ -64,6 +64,7 @@ struct LogsComparison {
                 // TODO: double check this normalising is working
                 let patterns = [
                     "^.*(Test Case .* started.)$",
+                    "^.*(Test Case .* (passed|failed))",
                     "^.*(START HOOK: .*)",
                     "^.*(END HOOK: .*)",
                 ]
