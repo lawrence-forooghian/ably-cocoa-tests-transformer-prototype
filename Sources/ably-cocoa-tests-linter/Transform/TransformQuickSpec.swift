@@ -3,7 +3,8 @@ import SwiftSyntax
 // Transforms subclasses of QuickSpec to XCTestCase
 class TransformQuickSpec: SyntaxRewriter {
     struct Options {
-        var onlyLocalsToGlobals = false
+        var rewriteLocalsToGlobals = false
+        var rewriteTestCode = false
     }
 
     let options: Options
@@ -71,7 +72,7 @@ class TransformQuickSpec: SyntaxRewriter {
         let newNode = classDecl.withInheritanceClause(newInheritanceClause)
 
         let transformed = TransformQuickSpecSubclass(
-            classDeclaration: options.onlyLocalsToGlobals ? classDecl : newNode,
+            classDeclaration: options.rewriteTestCode ? newNode : classDecl,
             options: options
         )
         .transformed()

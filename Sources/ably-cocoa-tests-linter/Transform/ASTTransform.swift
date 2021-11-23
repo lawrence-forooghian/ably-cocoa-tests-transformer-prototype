@@ -30,7 +30,7 @@ struct ASTTransform {
                 immediatelyInsideScope: .init(topLevel: .spec(spec))
             )
 
-            if options.onlyLocalsToGlobals {
+            if !options.rewriteTestCode {
                 let newSpec = spec
                     .replacingContents(with: contentsTransformationResult.replacementContents)
                 let classItems = contentsTransformationResult.items
@@ -141,7 +141,7 @@ struct ASTTransform {
         newFunctionDeclaration.body!.statements = newFunctionDeclaration.body!.statements
             .appending(switchStatementCodeBlockItem)
 
-        if !options.onlyLocalsToGlobals {
+        if options.rewriteTestCode {
             newFunctionDeclaration = SyntaxManipulationHelpers
                 .addingTestCaseArgumentToReusableTestsFunctionDeclaration(
                     newFunctionDeclaration,
@@ -160,7 +160,7 @@ struct ASTTransform {
             )),
         ]
 
-        if !options.onlyLocalsToGlobals {
+        if options.rewriteTestCode {
             let enumDeclaration = SyntaxManipulationHelpers
                 .makeEnumDeclaration(fromEnum: reusableTestCaseEnum)
             let item = ScopeLevelItemTransformationResult.Item.replacementItem(.init(
@@ -188,7 +188,7 @@ struct ASTTransform {
                 .appending(AST.ScopeLevel.describeOrContext(describeOrContext))
         )
 
-        if options.onlyLocalsToGlobals {
+        if !options.rewriteTestCode {
             let itemsWithoutReplacementContents = { (result: ScopeLevelItemTransformationResult) in
                 result.items.filter { item in
                     if case .replacementItem = item {
@@ -247,7 +247,7 @@ struct ASTTransform {
         _ reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
         insideScope scope: AST.Scope
     ) -> ScopeLevelItemTransformationResult {
-        if options.onlyLocalsToGlobals {
+        if !options.rewriteTestCode {
             return .init(replacementItem: .reusableTestsCall(reusableTestsCall))
         }
 
@@ -296,7 +296,7 @@ struct ASTTransform {
         _ it: AST.ScopeLevel.Item.It,
         insideScope scope: AST.Scope
     ) -> ScopeLevelItemTransformationResult {
-        if options.onlyLocalsToGlobals {
+        if !options.rewriteTestCode {
             return .init(replacementItem: .it(it))
         }
 
@@ -420,7 +420,7 @@ struct ASTTransform {
         _ hook: AST.ScopeLevel.Item.Hook,
         insideScope scope: AST.Scope
     ) -> ScopeLevelItemTransformationResult {
-        if options.onlyLocalsToGlobals {
+        if !options.rewriteTestCode {
             return .init(replacementItem: .hook(hook))
         }
 
