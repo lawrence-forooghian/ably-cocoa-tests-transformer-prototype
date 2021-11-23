@@ -85,8 +85,15 @@ struct LogsComparison {
             }
 
             newLines = newLines.map { line in
-                // tests in Quick don't have the "test__" prefix
-                line.replacingOccurrences(of: "test__", with: "")
+                // tests in Quick don't have the "test__" prefix,
+                // nor the migrator's index that forces ordering
+                let regex = try! NSRegularExpression(pattern: "test__(\\d+__)?")
+                return regex.stringByReplacingMatches(
+                    in: line,
+                    options: [],
+                    range: NSRange(location: 0, length: line.count),
+                    withTemplate: ""
+                )
             }
 
             return .init(lines: newLines)
