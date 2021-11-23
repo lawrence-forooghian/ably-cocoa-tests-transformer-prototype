@@ -3,10 +3,10 @@ import SwiftSyntax
 
 enum QuickSpecMethodCall {
     case hook(_: HookType)
-    case it(testDescription: String, skipped: Bool)
+    case it(testDescription: String, skipped: Bool, number: Int?)
 
     private var isSkipped: Bool {
-        guard case let .it(testDescription: _, skipped: skipped) = self else {
+        guard case let .it(testDescription: _, skipped: skipped, number: _) = self else {
             return false
         }
 
@@ -17,7 +17,8 @@ enum QuickSpecMethodCall {
         switch self {
         case .hook(.beforeEach): return "beforeEach"
         case .hook(.afterEach): return "afterEach"
-        case let .it(testDescription: testDescription, skipped: _): return testDescription
+        case let .it(testDescription: testDescription, skipped: _,
+                     number: _): return testDescription
         }
     }
 
@@ -25,6 +26,15 @@ enum QuickSpecMethodCall {
         switch self {
         case .it: return true
         default: return false
+        }
+    }
+
+    private var number: Int? {
+        switch self {
+        case let .it(testDescription: _, skipped: _, number: number):
+            return number
+        default:
+            return nil
         }
     }
 
@@ -39,6 +49,16 @@ enum QuickSpecMethodCall {
         default: fatalError("this initializer isn't ready for other function names yet")
         }
     }
+
+    private static let numberFormatter: NumberFormatter = {
+        let numberFormatter = NumberFormatter()
+        // TODO: we can maybe be smarter based on # tests in test file
+        // padding is needed to make sure lexicographic => numeric order
+        numberFormatter
+            .minimumIntegerDigits =
+            3 /* this is plenty for Ably codebase, don't have 1000 tests in any one file */
+        return numberFormatter
+    }()
 
     func outputFunctionName(inScope scope: AST.Scope) -> String {
         // The aim is to reproduce the naming logic used by Quick, so we
@@ -55,6 +75,11 @@ enum QuickSpecMethodCall {
         }()
 
         if generatesTestMethod {
+            if let number = number {
+                let formattedNumber = type(of: self).numberFormatter
+                    .string(from: number as NSNumber)!
+                unsanitisedComponents.insert(formattedNumber, at: 0)
+            }
             unsanitisedComponents.insert("test", at: 0)
         }
 

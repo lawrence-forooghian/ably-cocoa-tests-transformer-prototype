@@ -1,7 +1,12 @@
 import SwiftSyntax
 
-struct ASTTransform {
-    var options: TransformQuickSpec.Options
+class ASTTransform {
+    let options: TransformQuickSpec.Options
+    private var nextTestNumber = 1
+
+    init(options: TransformQuickSpec.Options) {
+        self.options = options
+    }
 
     func transformClassDeclaration(_ classDeclaration: AST.ClassDeclaration)
         -> ClassTransformationResult
@@ -301,10 +306,19 @@ struct ASTTransform {
 
         let caseInvocationFunctionDeclarations = reusableTestCaseEnum.cases
             .map { enumCase -> FunctionDeclSyntax in
-                SyntaxManipulationHelpers.makeCaseInvocationFunctionDeclaration(
+                let functionName = QuickSpecMethodCall.it(
+                    testDescription: enumCase.name,
+                    skipped: false,
+                    number: nextTestNumber
+                )
+                .outputFunctionName(inScope: scope)
+                nextTestNumber += 1
+
+                return SyntaxManipulationHelpers.makeCaseInvocationFunctionDeclaration(
                     forCase: enumCase,
                     call: reusableTestsCall,
-                    insideScope: scope
+                    insideScope: scope,
+                    functionName: functionName
                 )
             }
 
@@ -327,9 +341,18 @@ struct ASTTransform {
 
         let testDescription = QuickSpecMethodCall.getFunctionArgument(it.syntax)
 
+        let number: Int?
+        if scope.isReusableTests {
+            number = nil
+        } else {
+            number = nextTestNumber
+            nextTestNumber += 1
+        }
+
         let methodName = QuickSpecMethodCall.it(
             testDescription: testDescription,
-            skipped: it.skipped
+            skipped: it.skipped,
+            number: number
         )
         .outputFunctionName(inScope: scope)
 

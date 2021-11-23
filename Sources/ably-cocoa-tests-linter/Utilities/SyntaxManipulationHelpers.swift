@@ -360,7 +360,8 @@ enum SyntaxManipulationHelpers {
     ) -> String {
         return QuickSpecMethodCall.it(
             testDescription: reusableTestsCall.calledFunctionName,
-            skipped: false
+            skipped: false,
+            number: nil /* it's not an actual test method, don't need a number */
         ).outputFunctionName(inScope: scope)
     }
 
@@ -466,7 +467,8 @@ enum SyntaxManipulationHelpers {
     static func makeCaseInvocationFunctionDeclaration(
         forCase enumCase: ASTTransform.ScopeLevelItemTransformationResult.ReusableTestCaseEnum.Case,
         call reusableTestsCall: AST.ScopeLevel.Item.ReusableTestsCall,
-        insideScope scope: AST.Scope
+        insideScope scope: AST.Scope,
+        functionName: String
     ) -> FunctionDeclSyntax {
         let codeBlockItem = SyntaxFactory.makeCodeBlockItem(
             item: Syntax(makeReusableTestsFunctionCallWrapperFunctionCallExpression(
@@ -478,9 +480,6 @@ enum SyntaxManipulationHelpers {
             errorTokens: nil
         )
         let statements = SyntaxFactory.makeCodeBlockItemList([codeBlockItem])
-
-        let functionName = QuickSpecMethodCall.it(testDescription: enumCase.name, skipped: false)
-            .outputFunctionName(inScope: scope)
 
         return SyntaxFactory.makeFunctionDecl(
             attributes: nil,
