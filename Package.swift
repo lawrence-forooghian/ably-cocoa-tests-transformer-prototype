@@ -24,9 +24,5 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        .testTarget(
-            name: "ably-cocoa-tests-linterTests",
-            dependencies: ["ably-cocoa-tests-linter"]
-        ),
     ]
 )
