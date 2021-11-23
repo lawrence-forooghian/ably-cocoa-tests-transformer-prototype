@@ -17,13 +17,19 @@ struct RunTransformation: ParsableCommand {
     @Flag(inversion: .prefixedNo, help: "Rewrite test code. Implies rewriteLocalsToGlobals.")
     var rewriteTestCode = true
 
+    @Flag(
+        help: "Add logging to lifecycle events. For debugging, to compare Quick tests with migrated tests."
+    )
+    var addLogging = false
+
     @Argument(help: "The directory containing the Swift source files to transform.")
     var directory: String
 
     private var options: TransformQuickSpec.Options {
         return TransformQuickSpec.Options(
             rewriteLocalsToGlobals: rewriteTestCode || rewriteLocalsToGlobals,
-            rewriteTestCode: rewriteTestCode
+            rewriteTestCode: rewriteTestCode,
+            addLogging: addLogging
         )
     }
 

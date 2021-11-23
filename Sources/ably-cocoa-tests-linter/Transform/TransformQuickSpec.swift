@@ -5,6 +5,7 @@ class TransformQuickSpec: SyntaxRewriter {
     struct Options {
         var rewriteLocalsToGlobals = false
         var rewriteTestCode = false
+        var addLogging = false
     }
 
     let options: Options

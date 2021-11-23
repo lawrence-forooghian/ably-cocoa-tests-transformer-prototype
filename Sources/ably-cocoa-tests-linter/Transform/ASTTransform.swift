@@ -432,19 +432,28 @@ struct ASTTransform {
         _ hook: AST.ScopeLevel.Item.Hook,
         insideScope scope: AST.Scope
     ) -> ScopeLevelItemTransformationResult {
+        var newHook = hook
+
+        if options.addLogging {
+            // To be able to compare before & after code, the logging needs to only surround
+            // the original hook (i.e. exclude calls to parent context hooks)
+            newHook = addingLogging(toHook: newHook, insideScope: scope)
+        }
+
         if !options.rewriteTestCode {
-            return .init(replacementItem: .hook(hook))
+            // TODO: sort this out for the rewrite case (we want the logging to be outmost)
+            return .init(replacementItem: .hook(newHook))
         }
 
         // `beforeEach` or `afterEach` gets turned into a method
 
-        let methodCall = QuickSpecMethodCall(functionCallExpr: hook.syntax)
+        let methodCall = QuickSpecMethodCall(functionCallExpr: newHook.syntax)
         let methodName = methodCall.outputFunctionName(inScope: scope)
 
         // Now we grab the trailing closure from the call to `before/afterEach` and use that as the new test method's body
         // TODO: we can probably DRY this up with the `it` equivalent
 
-        guard let trailingClosure = hook.syntax.trailingClosure else {
+        guard let trailingClosure = newHook.syntax.trailingClosure else {
             preconditionFailure("I expect a call to `before/afterEach` to have a trailing closure")
         }
 
@@ -594,13 +603,91 @@ struct ASTTransform {
                 statements: newStatements,
                 rightBrace: trailingClosure.rightBrace
             )
-        ).withLeadingTrivia(hook.syntax.leadingTrivia!)
-            .withTrailingTrivia(hook.syntax.trailingTrivia!)
+        ).withLeadingTrivia(newHook.syntax.leadingTrivia!)
+            .withTrailingTrivia(newHook.syntax.trailingTrivia!)
 
         if scope.isReusableTests {
             return .init(replacementItem: .functionDeclaration(hookFunctionDeclaration))
         } else {
             return .init(classLevelDeclaration: hookFunctionDeclaration)
         }
+    }
+
+    private func addingLogging(
+        toHook hook: AST.ScopeLevel.Item.Hook,
+        insideScope scope: AST.Scope
+    ) -> AST.ScopeLevel.Item.Hook {
+        var newHook = hook
+
+        let startFunctionCallExpr = createLoggingFunctionCallExpr(
+            forHookType: hook.hookType,
+            insideScope: scope,
+            disposition: .atStart
+        )
+        let endFunctionCallExpr = createLoggingFunctionCallExpr(
+            forHookType: hook.hookType,
+            insideScope: scope,
+            disposition: .atEnd
+        )
+
+        var newStatements = newHook.syntax.trailingClosure!.statements
+        newStatements = newStatements.prepending(SyntaxFactory.makeCodeBlockItem(
+            item: Syntax(startFunctionCallExpr),
+            semicolon: nil,
+            errorTokens: nil
+        ))
+        newStatements = newStatements.appending(SyntaxFactory.makeCodeBlockItem(
+            item: Syntax(endFunctionCallExpr),
+            semicolon: nil,
+            errorTokens: nil
+        ))
+
+        newHook.syntax.trailingClosure!.statements = newStatements
+
+        return newHook
+    }
+
+    private enum LogStatementDisposition {
+        case atStart
+        case atEnd
+
+        var loggingDescription: String {
+            switch self {
+            case .atStart: return "START"
+            case .atEnd: return "END"
+            }
+        }
+    }
+
+    private func createLoggingFunctionCallExpr(
+        forHookType hookType: HookType,
+        insideScope scope: AST.Scope,
+        disposition: LogStatementDisposition
+    ) -> FunctionCallExprSyntax {
+        let functionName = QuickSpecMethodCall.hook(hookType).outputFunctionName(inScope: scope)
+
+        let argumentExpr = ExprSyntax(SyntaxFactory
+            .makeStringLiteralExpr("\(disposition.loggingDescription) HOOK: \(functionName)"))
+
+        let argumentList = SyntaxFactory.makeTupleExprElementList([
+            SyntaxFactory.makeTupleExprElement(
+                label: nil,
+                colon: nil,
+                expression: argumentExpr,
+                trailingComma: nil
+            ),
+        ])
+
+        return SyntaxFactory.makeFunctionCallExpr(
+            calledExpression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                identifier: SyntaxFactory.makeIdentifier("print"),
+                declNameArguments: nil
+            )),
+            leftParen: SyntaxFactory.makeLeftParenToken(),
+            argumentList: argumentList,
+            rightParen: SyntaxFactory.makeRightParenToken(),
+            trailingClosure: nil,
+            additionalTrailingClosures: nil
+        ).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
     }
 }
