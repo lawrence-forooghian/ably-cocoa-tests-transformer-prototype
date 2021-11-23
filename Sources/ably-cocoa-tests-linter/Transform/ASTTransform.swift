@@ -69,65 +69,95 @@ class ASTTransform {
         }
     }
 
+    private func orderedIndicesForVisitingContents(_ contents: [AST.ScopeLevel.Item])
+        -> [Int]
+    {
+        // the order of visiting the `it`s affects the order in which the tests will
+        // ultimately be executed (since we increment the nextTestNumber as we
+        // visit and this ends up in the test method name)
+        //
+        // So, to make sure our tests get executed in the same order as they would in
+        // Quick, we copy Quick's logic that determines how it populates
+        // the results of the +testInvocations method. This is ultimately determined
+        // by ExampleGroup#Examples, which does childExamples + childGroups.flatMap { $0.examples }
+        // - i.e. first run all of your direct children test cases, then go deeper.
+        let itItemIndices = contents.indices.filter { index in
+            switch contents[index] {
+            case .it: return true
+            default: return false
+            }
+        }
+
+        return itItemIndices + contents.indices.filter { !itItemIndices.contains($0) }
+    }
+
     private func transformContents(
         _ contents: [AST.ScopeLevel.Item],
         immediatelyInsideScope scope: AST.Scope
     ) -> ScopeLevelItemTransformationResult {
-        return contents.map { item -> ScopeLevelItemTransformationResult in
+        let orderedIndices = orderedIndicesForVisitingContents(contents)
+        var transformed = [ScopeLevelItemTransformationResult?](repeating: nil,
+                                                                count: contents.count)
+
+        orderedIndices.forEach { index in
             // TODO: what if there's stuff that clashes? especially once we shift things around in scope
             // e.g. `name` property on test case
+            let item = contents[index]
 
-            switch item {
-            case .variableDeclaration where scope.isReusableTests:
-                // it's not a function call's closure we're inside, it's a function body with local variables, which will remain local
-                return .init(replacementItem: item)
-            case .functionDeclaration where scope.isReusableTests:
-                // it's not a function call's closure we're inside, it's a function body with local functions, which will remain local
-                // TODO: see if we actually have any functions like this in our codebase
-                return .init(replacementItem: item)
-            case let .variableDeclaration(variableDecl):
-                if !options.rewriteLocalsToGlobals {
+            transformed[index] = { () -> ScopeLevelItemTransformationResult? in
+                switch item {
+                case .variableDeclaration where scope.isReusableTests:
+                    // it's not a function call's closure we're inside, it's a function body with local variables, which will remain local
                     return .init(replacementItem: item)
-                }
-                // Variable declarations in the body of a trailing closure passed to spec / describe etc
-                // get hoisted to private global variables
-                let transformedVariableDeclaration = SyntaxManipulationHelpers
-                    .transformToPrivateGlobal(variableDecl)
-                return .init(globalDeclaration: transformedVariableDeclaration)
-            case let .functionDeclaration(functionDecl):
-                if !options.rewriteLocalsToGlobals {
+                case .functionDeclaration where scope.isReusableTests:
+                    // it's not a function call's closure we're inside, it's a function body with local functions, which will remain local
+                    // TODO: see if we actually have any functions like this in our codebase
                     return .init(replacementItem: item)
+                case let .variableDeclaration(variableDecl):
+                    if !options.rewriteLocalsToGlobals {
+                        return .init(replacementItem: item)
+                    }
+                    // Variable declarations in the body of a trailing closure passed to spec / describe etc
+                    // get hoisted to private global variables
+                    let transformedVariableDeclaration = SyntaxManipulationHelpers
+                        .transformToPrivateGlobal(variableDecl)
+                    return .init(globalDeclaration: transformedVariableDeclaration)
+                case let .functionDeclaration(functionDecl):
+                    if !options.rewriteLocalsToGlobals {
+                        return .init(replacementItem: item)
+                    }
+                    // Function declarations in the body of a trailing closure passed to spec / describe etc
+                    // get hoisted to private global functions
+                    let transformedFunctionDeclaration = SyntaxManipulationHelpers
+                        .transformToPrivateGlobal(functionDecl)
+                    return .init(globalDeclaration: transformedFunctionDeclaration)
+                case let .structDeclaration(structDecl):
+                    if !options.rewriteLocalsToGlobals {
+                        return .init(replacementItem: item)
+                    }
+                    // Struct declarations just get hoisted outside of spec()
+                    // We only have one of these in Ably at time of writing
+                    return .init(classLevelDeclaration: structDecl)
+                case let .reusableTestsDeclaration(reusableTestsDecl):
+                    return transformReusableTestsDeclaration(
+                        reusableTestsDecl,
+                        className: scope.className
+                    )
+                case let .describeOrContext(describeOrContext):
+                    return transformDescribeOrContext(describeOrContext, insideScope: scope)
+                case let .it(it):
+                    return transformIt(it, insideScope: scope)
+                case let .reusableTestsCall(reusableTestsCall):
+                    return transformReusableTestsCall(reusableTestsCall, insideScope: scope)
+                case let .hook(hook):
+                    return transformHook(hook, insideScope: scope)
+                case .arbitrarySyntax:
+                    preconditionFailure("Not expecting to receive .arbitrarySyntax in input")
                 }
-                // Function declarations in the body of a trailing closure passed to spec / describe etc
-                // get hoisted to private global functions
-                let transformedFunctionDeclaration = SyntaxManipulationHelpers
-                    .transformToPrivateGlobal(functionDecl)
-                return .init(globalDeclaration: transformedFunctionDeclaration)
-            case let .structDeclaration(structDecl):
-                if !options.rewriteLocalsToGlobals {
-                    return .init(replacementItem: item)
-                }
-                // Struct declarations just get hoisted outside of spec()
-                // We only have one of these in Ably at time of writing
-                return .init(classLevelDeclaration: structDecl)
-            case let .reusableTestsDeclaration(reusableTestsDecl):
-                return transformReusableTestsDeclaration(
-                    reusableTestsDecl,
-                    className: scope.className
-                )
-            case let .describeOrContext(describeOrContext):
-                return transformDescribeOrContext(describeOrContext, insideScope: scope)
-            case let .it(it):
-                return transformIt(it, insideScope: scope)
-            case let .reusableTestsCall(reusableTestsCall):
-                return transformReusableTestsCall(reusableTestsCall, insideScope: scope)
-            case let .hook(hook):
-                return transformHook(hook, insideScope: scope)
-            case .arbitrarySyntax:
-                preconditionFailure("Not expecting to receive .arbitrarySyntax in input")
-            }
+            }()
         }
-        .reduce(.empty) { $0.appending($1) }
+
+        return transformed.map { $0! }.reduce(.empty) { $0.appending($1) }
     }
 
     private func transformReusableTestsDeclaration(
