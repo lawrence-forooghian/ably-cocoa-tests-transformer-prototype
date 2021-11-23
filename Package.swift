@@ -5,6 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "ably-cocoa-tests-linter",
+    platforms: [.macOS(.v12)],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         .package(
@@ -21,6 +22,12 @@ let package = Package(
             name: "ably-cocoa-tests-linter",
             dependencies: [
                 "SwiftSyntax",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .executableTarget(
+            name: "ably-cocoa-tests-linter-log-comparison",
+            dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
