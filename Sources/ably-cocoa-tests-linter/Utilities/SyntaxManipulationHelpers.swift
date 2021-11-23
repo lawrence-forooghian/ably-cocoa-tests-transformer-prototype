@@ -81,7 +81,7 @@ enum SyntaxManipulationHelpers {
 
             // Add trailing comma to final param (or penultimate if has trailing closure)
             var newFinalParam = finalParam
-            newFinalParam = newFinalParam.withTrailingComma(SyntaxFactory.makeCommaToken())
+            newFinalParam = newFinalParam.withTrailingComma(SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)))
             parameterList = parameterList.replacing(
                 childAt: parameterList.count - (hasTrailingClosure ? 2 : 1),
                 with: newFinalParam
@@ -89,7 +89,7 @@ enum SyntaxManipulationHelpers {
         }
 
         var newParam = param
-        newParam.trailingComma = hasTrailingClosure ? SyntaxFactory.makeCommaToken() : nil
+        newParam.trailingComma = hasTrailingClosure ? SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)) : nil
         parameterList = parameterList.inserting(
             newParam,
             at: hasTrailingClosure ? parameterList.count - 1 : parameterList.count
@@ -113,7 +113,7 @@ enum SyntaxManipulationHelpers {
             attributes: nil,
             firstName: SyntaxFactory.makeIdentifier("testCase"),
             secondName: nil,
-            colon: SyntaxFactory.makeColonToken(),
+            colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
             type: parameterType,
             ellipsis: nil,
             defaultArgument: nil,
@@ -133,7 +133,7 @@ enum SyntaxManipulationHelpers {
             attributes: nil,
             firstName: SyntaxFactory.makeIdentifier("context"),
             secondName: nil,
-            colon: SyntaxFactory.makeColonToken(),
+            colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
             type: parameterType,
             ellipsis: nil,
             defaultArgument: nil,
@@ -162,7 +162,7 @@ enum SyntaxManipulationHelpers {
         if !newArgumentList.isEmpty {
             let index = newArgumentList.index(newArgumentList.endIndex, offsetBy: -1)
             var newArgument = newArgumentList[index]
-            newArgument = newArgument.withTrailingComma(SyntaxFactory.makeCommaToken())
+            newArgument = newArgument.withTrailingComma(SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)))
             newArgumentList = newArgumentList.replacing(
                 childAt: newArgumentList.count - 1,
                 with: newArgument
@@ -180,7 +180,7 @@ enum SyntaxManipulationHelpers {
     ) -> FunctionCallExprSyntax {
         let contextParam = SyntaxFactory.makeTupleExprElement(
             label: SyntaxFactory.makeIdentifier("context"),
-            colon: SyntaxFactory.makeColonToken(),
+            colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
             expression: ExprSyntax(makeContextTupleExpr(insideScope: scope)),
             trailingComma: nil
         )
@@ -193,7 +193,7 @@ enum SyntaxManipulationHelpers {
     ) -> FunctionCallExprSyntax {
         let testCaseParam = SyntaxFactory.makeTupleExprElement(
             label: SyntaxFactory.makeIdentifier("testCase"),
-            colon: SyntaxFactory.makeColonToken(),
+            colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
             expression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
                 identifier: SyntaxFactory.makeIdentifier("testCase"),
                 declNameArguments: nil
@@ -236,13 +236,13 @@ enum SyntaxManipulationHelpers {
         let elementList = SyntaxFactory.makeTupleExprElementList([
             SyntaxFactory.makeTupleExprElement(
                 label: SyntaxFactory.makeIdentifier("beforeEach"),
-                colon: SyntaxFactory.makeColonToken(),
+                colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
                 expression: beforeEachExpr,
-                trailingComma: SyntaxFactory.makeCommaToken()
+                trailingComma: SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1))
             ),
             SyntaxFactory.makeTupleExprElement(
                 label: SyntaxFactory.makeIdentifier("afterEach"),
-                colon: SyntaxFactory.makeColonToken(),
+                colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
                 expression: afterEachExpr,
                 trailingComma: nil
             ),
@@ -391,7 +391,7 @@ enum SyntaxManipulationHelpers {
                 attributes: nil,
                 firstName: SyntaxFactory.makeIdentifier("testCase"),
                 secondName: nil,
-                colon: SyntaxFactory.makeColonToken(),
+                colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
                 type: SyntaxFactory.makeTypeIdentifier(reusableTestCaseEnum.name),
                 ellipsis: nil,
                 defaultArgument: nil,
@@ -441,7 +441,7 @@ enum SyntaxManipulationHelpers {
         let argumentList = SyntaxFactory.makeTupleExprElementList([
             SyntaxFactory.makeTupleExprElement(
                 label: SyntaxFactory.makeIdentifier("testCase"),
-                colon: SyntaxFactory.makeColonToken(),
+                colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
                 expression: ExprSyntax(SyntaxFactory.makeMemberAccessExpr(
                     base: nil,
                     dot: SyntaxFactory.makeIdentifier("."),
