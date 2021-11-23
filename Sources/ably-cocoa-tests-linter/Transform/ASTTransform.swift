@@ -6,7 +6,9 @@ struct ASTTransform {
     func transformClassDeclaration(_ classDeclaration: AST.ClassDeclaration)
         -> ClassTransformationResult
     {
-        let transformationResults = classDeclaration.items.map(transformClassDeclarationItem)
+        let className = classDeclaration.syntax.identifier.text
+        let transformationResults = classDeclaration.items
+            .map { transformClassDeclarationItem($0, className: className) }
 
         return ClassTransformationResult(
             globalDeclarations: transformationResults.flatMap(\.globalDeclarations),
@@ -15,7 +17,7 @@ struct ASTTransform {
         )
     }
 
-    private func transformClassDeclarationItem(_ item: AST.ClassDeclaration.Item)
+    private func transformClassDeclarationItem(_ item: AST.ClassDeclaration.Item, className: String)
         -> ClassDeclarationItemTransformationResult
     {
         // I think the only class-level thing we want to manipulate is the `spec` function – everything else
@@ -27,7 +29,7 @@ struct ASTTransform {
         case let .spec(spec):
             let contentsTransformationResult = transformContents(
                 spec.contents,
-                immediatelyInsideScope: .init(topLevel: .spec(spec))
+                immediatelyInsideScope: .init(className: className, topLevel: .spec(spec))
             )
 
             if !options.rewriteTestCode {
@@ -104,7 +106,10 @@ struct ASTTransform {
                 // We only have one of these in Ably at time of writing
                 return .init(classLevelDeclaration: structDecl)
             case let .reusableTestsDeclaration(reusableTestsDecl):
-                return transformReusableTestsDeclaration(reusableTestsDecl)
+                return transformReusableTestsDeclaration(
+                    reusableTestsDecl,
+                    className: scope.className
+                )
             case let .describeOrContext(describeOrContext):
                 return transformDescribeOrContext(describeOrContext, insideScope: scope)
             case let .it(it):
@@ -120,9 +125,11 @@ struct ASTTransform {
         .reduce(.empty) { $0.appending($1) }
     }
 
-    private func transformReusableTestsDeclaration(_ reusableTestsDecl: AST.ScopeLevel
-        .ReusableTestsDeclaration) -> ScopeLevelItemTransformationResult
-    {
+    private func transformReusableTestsDeclaration(
+        _ reusableTestsDecl: AST.ScopeLevel
+            .ReusableTestsDeclaration,
+        className: String
+    ) -> ScopeLevelItemTransformationResult {
         // TODO: this method is a huge mess, let's tidy it up
         // TODO: let's emit a warning when this returns no test cases? probably means we unrolled a loop incorrectly
         // This is a special case that defines a bunch of contexts etc, we treat it similarly to a `spec` call
@@ -130,7 +137,10 @@ struct ASTTransform {
 
         let transformationResult = transformContents(
             reusableTestsDecl.contents,
-            immediatelyInsideScope: .init(topLevel: .reusableTestsDeclaration(reusableTestsDecl))
+            immediatelyInsideScope: .init(
+                className: className,
+                topLevel: .reusableTestsDeclaration(reusableTestsDecl)
+            )
         )
 
         // We now add the switch statement which invokes one
@@ -273,6 +283,7 @@ struct ASTTransform {
         let transformationResult = transformContents(
             reusableTestsDeclaration.contents,
             immediatelyInsideScope: .init(
+                className: scope.className,
                 topLevel: .reusableTestsDeclaration(reusableTestsDeclaration)
             )
         )
@@ -667,7 +678,9 @@ struct ASTTransform {
         let functionName = QuickSpecMethodCall.hook(hookType).outputFunctionName(inScope: scope)
 
         let argumentExpr = ExprSyntax(SyntaxFactory
-            .makeStringLiteralExpr("\(disposition.loggingDescription) HOOK: \(functionName)"))
+            .makeStringLiteralExpr(
+                "\(disposition.loggingDescription) HOOK: \(scope.className).\(functionName)"
+            ))
 
         let argumentList = SyntaxFactory.makeTupleExprElementList([
             SyntaxFactory.makeTupleExprElement(

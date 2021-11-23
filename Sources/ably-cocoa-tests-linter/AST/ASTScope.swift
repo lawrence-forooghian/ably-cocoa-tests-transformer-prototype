@@ -1,25 +1,28 @@
 extension AST {
     struct Scope {
+        var className: String
         // Invariant: non-empty
         private(set) var levels: [ScopeLevel]
 
-        init(topLevel: ScopeLevel) {
+        init(className: String, topLevel: ScopeLevel) {
+            self.className = className
             levels = [topLevel]
         }
 
-        private init(levels: [ScopeLevel]) {
+        private init(className: String, levels: [ScopeLevel]) {
+            self.className = className
             self.levels = levels
         }
 
         func appending(_ level: ScopeLevel) -> Scope {
-            return Scope(levels: levels + [level])
+            return Scope(className: className, levels: levels + [level])
         }
 
         var parent: Self? {
             guard levels.count >= 2 else { return nil }
             var newLevels = levels
             newLevels.removeLast()
-            return .init(levels: newLevels)
+            return .init(className: className, levels: newLevels)
         }
 
         private var peek: ScopeLevel {
