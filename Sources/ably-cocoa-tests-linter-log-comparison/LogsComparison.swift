@@ -63,8 +63,9 @@ struct LogsComparison {
 
                 // TODO: double check this normalising is working
                 let patterns = [
+                    "^.*(Test Suite .* started)",
                     "^.*(Test Case .* started.)$",
-                    "^.*(Test Case .* (passed|failed))",
+//                    "^.*(Test Case .* )(passed|failed)", // getting rid of this for now because a failure causes everything else to get out of sync
                     "^.*(START HOOK: .*)",
                     "^.*(END HOOK: .*)",
                 ]
