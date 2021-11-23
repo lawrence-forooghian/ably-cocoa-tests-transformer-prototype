@@ -79,18 +79,27 @@ struct ASTTransform {
                 // TODO: see if we actually have any functions like this in our codebase
                 return .init(replacementItem: item)
             case let .variableDeclaration(variableDecl):
+                if !options.rewriteLocalsToGlobals {
+                    return .init(replacementItem: item)
+                }
                 // Variable declarations in the body of a trailing closure passed to spec / describe etc
                 // get hoisted to private global variables
                 let transformedVariableDeclaration = SyntaxManipulationHelpers
                     .transformToPrivateGlobal(variableDecl)
                 return .init(globalDeclaration: transformedVariableDeclaration)
             case let .functionDeclaration(functionDecl):
+                if !options.rewriteLocalsToGlobals {
+                    return .init(replacementItem: item)
+                }
                 // Function declarations in the body of a trailing closure passed to spec / describe etc
                 // get hoisted to private global functions
                 let transformedFunctionDeclaration = SyntaxManipulationHelpers
                     .transformToPrivateGlobal(functionDecl)
                 return .init(globalDeclaration: transformedFunctionDeclaration)
             case let .structDeclaration(structDecl):
+                if !options.rewriteLocalsToGlobals {
+                    return .init(replacementItem: item)
+                }
                 // Struct declarations just get hoisted outside of spec()
                 // We only have one of these in Ably at time of writing
                 return .init(classLevelDeclaration: structDecl)
@@ -138,8 +147,11 @@ struct ASTTransform {
         let newReusableTestsDecl = reusableTestsDecl
             .replacingContents(with: transformationResult.replacementContents)
         var newFunctionDeclaration = newReusableTestsDecl.syntax
-        newFunctionDeclaration.body!.statements = newFunctionDeclaration.body!.statements
-            .appending(switchStatementCodeBlockItem)
+
+        if options.rewriteTestCode {
+            newFunctionDeclaration.body!.statements = newFunctionDeclaration.body!.statements
+                .appending(switchStatementCodeBlockItem)
+        }
 
         if options.rewriteTestCode {
             newFunctionDeclaration = SyntaxManipulationHelpers
