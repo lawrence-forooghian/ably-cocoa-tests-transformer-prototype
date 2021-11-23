@@ -289,12 +289,12 @@ enum SyntaxManipulationHelpers {
                     .makeSwitchCaseLabel(caseKeyword: SyntaxFactory.makeCaseKeyword()
                         .withTrailingTrivia(.spaces(1)),
                         caseItems: SyntaxFactory.makeCaseItemList([caseItem]),
-                        colon: SyntaxFactory.makeColonToken())),
+                                         colon: SyntaxFactory.makeColonToken())).withTrailingTrivia(.newlines(1)),
                 statements: SyntaxFactory.makeCodeBlockItemList([SyntaxFactory.makeCodeBlockItem(
                     item: Syntax(functionCallExpression),
                     semicolon: nil,
                     errorTokens: nil
-                )])
+                ).withLeadingTrivia(.spaces(4))])
             )
         }
         let caseList = SyntaxFactory.makeSwitchCaseList(caseListItems.map { Syntax($0) })
@@ -305,13 +305,13 @@ enum SyntaxManipulationHelpers {
             switchKeyword: SyntaxFactory.makeSwitchKeyword().withLeadingTrivia(.newlines(1))
                 .withTrailingTrivia(.spaces(1)),
             expression: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
-                identifier: SyntaxFactory.makeIdentifier("testCase"),
+                identifier: SyntaxFactory.makeIdentifier("testCase").withTrailingTrivia(.spaces(1)),
                 declNameArguments: nil
             )),
             leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
             cases: caseList,
             rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
-        )
+        ).withLeadingTrivia(.newlines(2))
     }
 
     static func makeEnumCaseDeclaration(fromCase reusableTestCaseEnumCase: ASTTransform
