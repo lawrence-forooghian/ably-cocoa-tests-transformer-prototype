@@ -37,6 +37,8 @@ class ASTTransform {
                 immediatelyInsideScope: .init(className: className, topLevel: .spec(spec))
             )
 
+            var items: [ClassDeclarationItemTransformationResult.Item]
+
             if !options.rewriteTestCode {
                 let newSpec = spec
                     .replacingContents(with: contentsTransformationResult.replacementContents)
@@ -48,7 +50,7 @@ class ASTTransform {
                         case let .globalDeclaration(decl): return .globalDeclaration(decl.syntax)
                         }
                     }
-                return .init(items: classItems + [.replacementItem(.spec(newSpec))])
+                items = classItems + [.replacementItem(.spec(newSpec))]
             } else {
                 let classItems = contentsTransformationResult.items
                     .compactMap { item -> ClassDeclarationItemTransformationResult.Item? in
@@ -64,9 +66,144 @@ class ASTTransform {
                         case let .globalDeclaration(decl): return .globalDeclaration(decl.syntax)
                         }
                     }
-                return .init(items: classItems)
+
+                items = classItems
+            }
+
+            if options.rewriteLocalsToGlobals,
+               let initializationDecl =
+               createGlobalVariableInitializationMethod(from: contentsTransformationResult)
+            {
+                let initializationItem = ClassDeclarationItemTransformationResult.Item
+                    .replacementItem(.init(decl: initializationDecl))
+
+                items = [initializationItem] + items
+            }
+
+            return .init(items: items)
+        }
+    }
+
+    private func createGlobalVariableInitializationMethod(
+        from transformationResult: ScopeLevelItemTransformationResult
+    )
+        -> VariableDeclSyntax?
+    {
+        let variableNames = transformationResult.globalDeclarations.flatMap { decl -> [String] in
+            switch decl.initializationRequirements {
+            case .notNeeded: return []
+            case let .neededAtStartOfTestRun(variableNames: variableNames): return variableNames
             }
         }
+
+        guard !variableNames.isEmpty else {
+            return nil
+        }
+
+        /*
+         This runs at the start of the test suite, and allows us to initialize the variables
+         at the same moment they would have been by Quick
+
+         override class var defaultTestSuite: XCTestSuite {
+             print("Auth defaultTestSuite")
+             let _ = foo
+             let _ = foo2
+             return super.defaultTestSuite
+         }
+         */
+        let modifiers = SyntaxFactory.makeModifierList([
+            SyntaxFactory.makeDeclModifier(
+                name: SyntaxFactory.makeIdentifier("override"),
+                detailLeftParen: nil,
+                detail: nil,
+                detailRightParen: nil
+            ).withTrailingTrivia(.spaces(1)),
+            SyntaxFactory.makeDeclModifier(
+                name: SyntaxFactory.makeIdentifier("class"),
+                detailLeftParen: nil,
+                detail: nil,
+                detailRightParen: nil
+            ).withTrailingTrivia(.spaces(1)),
+        ])
+
+        let globalVariableUsageDeclarations = variableNames
+            .map { variableName -> VariableDeclSyntax in
+                SyntaxFactory.makeVariableDecl(
+                    attributes: nil,
+                    modifiers: nil,
+                    letOrVarKeyword: SyntaxFactory.makeLetKeyword()
+                        .withTrailingTrivia(.spaces(1)),
+                    bindings: SyntaxFactory
+                        .makePatternBindingList([SyntaxFactory.makePatternBinding(
+                            pattern: PatternSyntax(SyntaxFactory
+                                .makeIdentifierPattern(identifier: SyntaxFactory
+                                    .makeToken(.identifier("_"),
+                                               presence: .present))),
+                            typeAnnotation: nil,
+                            initializer: SyntaxFactory.makeInitializerClause(
+                                equal: SyntaxFactory
+                                    .makeEqualToken(leadingTrivia: .spaces(1),
+                                                    trailingTrivia: .spaces(1)),
+                                value: ExprSyntax(SyntaxFactory.makeIdentifierExpr(
+                                    identifier: SyntaxFactory.makeIdentifier(variableName),
+                                    declNameArguments: nil
+                                ))
+                            ),
+                            accessor: nil,
+                            trailingComma: nil
+                        )])
+                ).withTrailingTrivia(.newlines(1)).withLeadingTrivia(.spaces(4))
+            }
+
+        let superExpr = SyntaxFactory.makeMemberAccessExpr(
+            base: ExprSyntax(SyntaxFactory
+                .makeSuperRefExpr(superKeyword: SyntaxFactory.makeSuperKeyword())),
+            dot: SyntaxFactory.makeIdentifier("."),
+            name: SyntaxFactory.makeIdentifier("defaultTestSuite"),
+            declNameArguments: nil
+        )
+
+        let returnSuperExpr = SyntaxFactory.makeReturnStmt(
+            returnKeyword: SyntaxFactory.makeReturnKeyword().withTrailingTrivia(.spaces(1)),
+            expression: ExprSyntax(superExpr)
+        ).withTrailingTrivia(.newlines(1)).withLeadingTrivia(.newlines(1).appending(.spaces(4)))
+
+        let statements = globalVariableUsageDeclarations
+            .map {
+                SyntaxFactory.makeCodeBlockItem(item: Syntax($0), semicolon: nil, errorTokens: nil)
+            } +
+            [SyntaxFactory
+                .makeCodeBlockItem(item: Syntax(returnSuperExpr), semicolon: nil, errorTokens: nil)]
+
+        let accessor = SyntaxFactory.makeCodeBlock(
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withTrailingTrivia(.newlines(1)),
+            statements: SyntaxFactory.makeCodeBlockItemList(statements),
+            rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
+        )
+
+        let bindings = SyntaxFactory.makePatternBindingList([
+            SyntaxFactory.makePatternBinding(
+                pattern: PatternSyntax(SyntaxFactory
+                    .makeIdentifierPattern(identifier: SyntaxFactory
+                        .makeIdentifier("defaultTestSuite").withTrailingTrivia(.spaces(1)))),
+                typeAnnotation: SyntaxFactory.makeTypeAnnotation(
+                    colon: SyntaxFactory.makeColonToken().withTrailingTrivia(.spaces(1)),
+                    type: SyntaxFactory.makeTypeIdentifier("XCTestSuite")
+                        .withTrailingTrivia(.spaces(1))
+                ),
+                initializer: nil,
+                accessor: Syntax(accessor),
+                trailingComma: nil
+            ),
+        ])
+
+        // variable-declaration → variable-declaration-head variable-name type-annotation code-block
+        return SyntaxFactory.makeVariableDecl(
+            attributes: nil,
+            modifiers: modifiers,
+            letOrVarKeyword: SyntaxFactory.makeVarKeyword().withTrailingTrivia(.spaces(1)),
+            bindings: bindings
+        ).withLeadingTrivia(.newlines(2))
     }
 
     private func orderedIndicesForVisitingContents(_ contents: [AST.ScopeLevel.Item])
@@ -124,7 +261,9 @@ class ASTTransform {
                     let variableNames = extractVariableNames(fromDeclaration: variableDecl)
                     return .init(
                         globalDeclaration: transformedVariableDeclaration,
-                        initializationRequirements: .neededAtStartOfTestRun(variableNames: variableNames)
+                        initializationRequirements: .neededAtStartOfTestRun(
+                            variableNames: variableNames
+                        )
                     )
                 case let .functionDeclaration(functionDecl):
                     if !options.rewriteLocalsToGlobals {
