@@ -62,6 +62,7 @@ enum AST {
             case variableDeclaration(VariableDeclSyntax)
             case functionDeclaration(FunctionDeclSyntax)
             case structDeclaration(StructDeclSyntax)
+            case classDeclaration(ClassDeclSyntax)
             case reusableTestsDeclaration(ReusableTestsDeclaration)
             case describeOrContext(DescribeOrContext)
             case it(It)
@@ -80,6 +81,8 @@ enum AST {
                     return Syntax(functionDecl)
                 case let .structDeclaration(structDecl):
                     return Syntax(structDecl)
+                case let .classDeclaration(classDecl):
+                    return Syntax(classDecl)
                 case let .reusableTestsDeclaration(reusableTestsDeclaration):
                     return Syntax(reusableTestsDeclaration.syntax)
                 case let .describeOrContext(describeOrContext):

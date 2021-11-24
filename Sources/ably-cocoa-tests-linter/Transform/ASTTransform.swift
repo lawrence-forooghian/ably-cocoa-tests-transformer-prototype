@@ -282,8 +282,13 @@ class ASTTransform {
                         return .init(replacementItem: item)
                     }
                     // Struct declarations just get hoisted outside of spec()
-                    // We only have one of these in Ably at time of writing
                     return .init(classLevelDeclaration: structDecl)
+                case let .classDeclaration(classDecl):
+                    if !options.rewriteLocalsToGlobals {
+                        return .init(replacementItem: item)
+                    }
+                    // Class declarations just get hoisted outside of spec()
+                    return .init(classLevelDeclaration: classDecl)
                 case let .reusableTestsDeclaration(reusableTestsDecl):
                     return transformReusableTestsDeclaration(
                         reusableTestsDecl,

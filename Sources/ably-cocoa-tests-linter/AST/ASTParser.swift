@@ -59,6 +59,8 @@ extension AST {
                     )
                 } else if let structDeclaration = StructDeclSyntax(statement.item) {
                     return .structDeclaration(structDeclaration)
+                } else if let classDeclaration = ClassDeclSyntax(statement.item) {
+                    return .classDeclaration(classDeclaration)
                 } else if let functionDeclaration = FunctionDeclSyntax(statement.item) {
                     // TODO: let's emit a warning when this returns no test cases? probably means we unrolled a loop incorrectly
                     if functionDeclaration.identifier.text.starts(with: "reusableTests") {
