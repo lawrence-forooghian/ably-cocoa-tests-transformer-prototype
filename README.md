@@ -12,4 +12,4 @@ swift run ably-cocoa-tests-linter /Users/lawrence/code/ably/ably-cocoa/Spec/
 
 Run with the `--help` flag for information on accepted flags.
 
-You can also run with the `--add-logging` flag and then use the `ably-cocoa-tests-linter-log-comparison` package to compare pre and post migration execution order.
+You can also run with the `--add-logging` flag and then use the `ably-cocoa-tests-linter-log-comparison` package to compare pre and post migration execution order. (Don’t read too closely into the output of this tool, it seems to show the test suite as having run multiple times when I’m not convinced it did.)
