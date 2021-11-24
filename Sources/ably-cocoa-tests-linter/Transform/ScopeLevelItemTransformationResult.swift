@@ -9,8 +9,18 @@ extension ASTTransform {
                 var classLevelFallback: AST.ClassDeclaration.Item?
             }
 
+            struct GlobalDeclaration {
+                enum InitializationRequirements {
+                    case notNeeded
+                    case neededAtStartOfTestRun(variableNames: [String])
+                }
+
+                var syntax: DeclSyntax
+                var initializationRequirements: InitializationRequirements
+            }
+
             case replacementItem(ReplacementItem)
-            case globalDeclaration(DeclSyntax)
+            case globalDeclaration(GlobalDeclaration)
             case classDeclarationItem(AST.ClassDeclaration.Item)
         }
 
@@ -38,7 +48,7 @@ extension ASTTransform {
             }
         }
 
-        var globalDeclarations: [DeclSyntax] {
+        var globalDeclarations: [Item.GlobalDeclaration] {
             return items.compactMap { item in
                 if case let .globalDeclaration(decl) = item {
                     return decl
@@ -132,9 +142,17 @@ extension ASTTransform.ScopeLevelItemTransformationResult {
         self.init(classDeclarationItem: .init(decl: classLevelDeclaration))
     }
 
-    init<T: DeclSyntaxProtocol>(globalDeclaration: T) {
+    init<T: DeclSyntaxProtocol>(
+        globalDeclaration: T,
+        initializationRequirements: Item.GlobalDeclaration.InitializationRequirements
+    ) {
         self.init(
-            items: [.globalDeclaration(DeclSyntax(globalDeclaration))]
+            items: [.globalDeclaration(
+                Item.GlobalDeclaration(
+                    syntax: DeclSyntax(globalDeclaration),
+                    initializationRequirements: initializationRequirements
+                )
+            )]
         )
     }
 }

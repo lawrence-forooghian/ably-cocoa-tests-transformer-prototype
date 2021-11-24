@@ -54,7 +54,8 @@ class TransformQuickSpec: SyntaxRewriter {
         //        let typeName = quickSpecInheritedType.typeName
         //        let token = typeName.firstToken!
 
-        let newToken = SyntaxFactory.makeToken(.identifier("XCTestCase"), presence: .present).withTrailingTrivia(.spaces(1))
+        let newToken = SyntaxFactory.makeToken(.identifier("XCTestCase"), presence: .present)
+            .withTrailingTrivia(.spaces(1))
         //        let newToken = token.withKind(.identifier("XCTestCase")) // I'm keeping this around in case it helps with getting whitespace right
 
         let typeIdentifier = SimpleTypeIdentifierSyntax { builder in builder.useName(newToken) }

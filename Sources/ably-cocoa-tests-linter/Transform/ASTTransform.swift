@@ -45,7 +45,7 @@ class ASTTransform {
                         switch item {
                         case .replacementItem: return nil // handled in replacingContents above
                         case let .classDeclarationItem(item): return .replacementItem(item)
-                        case let .globalDeclaration(decl): return .globalDeclaration(decl)
+                        case let .globalDeclaration(decl): return .globalDeclaration(decl.syntax)
                         }
                     }
                 return .init(items: classItems + [.replacementItem(.spec(newSpec))])
@@ -61,7 +61,7 @@ class ASTTransform {
                                 "Transformation of `spec` gave replacementItem without a classLevelFallback; don’t know what to do with it"
                             )
                         case let .classDeclarationItem(item): return .replacementItem(item)
-                        case let .globalDeclaration(decl): return .globalDeclaration(decl)
+                        case let .globalDeclaration(decl): return .globalDeclaration(decl.syntax)
                         }
                     }
                 return .init(items: classItems)
@@ -121,7 +121,11 @@ class ASTTransform {
                     // get hoisted to private global variables
                     let transformedVariableDeclaration = SyntaxManipulationHelpers
                         .transformToPrivateGlobal(variableDecl)
-                    return .init(globalDeclaration: transformedVariableDeclaration)
+                    let variableNames = extractVariableNames(fromDeclaration: variableDecl)
+                    return .init(
+                        globalDeclaration: transformedVariableDeclaration,
+                        initializationRequirements: .neededAtStartOfTestRun(variableNames: variableNames)
+                    )
                 case let .functionDeclaration(functionDecl):
                     if !options.rewriteLocalsToGlobals {
                         return .init(replacementItem: item)
@@ -130,7 +134,10 @@ class ASTTransform {
                     // get hoisted to private global functions
                     let transformedFunctionDeclaration = SyntaxManipulationHelpers
                         .transformToPrivateGlobal(functionDecl)
-                    return .init(globalDeclaration: transformedFunctionDeclaration)
+                    return .init(
+                        globalDeclaration: transformedFunctionDeclaration,
+                        initializationRequirements: .notNeeded
+                    )
                 case let .structDeclaration(structDecl):
                     if !options.rewriteLocalsToGlobals {
                         return .init(replacementItem: item)
@@ -558,8 +565,7 @@ class ASTTransform {
                         semicolon: nil,
                         errorTokens: nil
                     ))
-                }
-                else if scope.isReusableTests {
+                } else if scope.isReusableTests {
                     let functionName = "context.beforeEach?"
 
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
@@ -611,8 +617,7 @@ class ASTTransform {
                             semicolon: nil,
                             errorTokens: nil
                         ))
-                }
-                else if scope.isReusableTests {
+                } else if scope.isReusableTests {
                     let functionName = "context.afterEach?"
 
                     let contextFunctionCall = SyntaxFactory.makeFunctionCallExpr(
@@ -753,5 +758,36 @@ class ASTTransform {
             trailingClosure: nil,
             additionalTrailingClosures: nil
         ).withLeadingTrivia(.newlines(1)).withTrailingTrivia(.newlines(1))
+    }
+
+    private func extractVariableNames(fromDeclaration variableDecl: VariableDeclSyntax)
+        -> [String]
+    {
+        guard variableDecl.bindings.count == 1 else {
+            preconditionFailure(
+                "I don’t know how to handle variable declarations with multiple bindings"
+            )
+        }
+        let binding = variableDecl.bindings.first!
+
+        if let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) {
+            return [identifierPattern.identifier.text] /* TODO: is this correct? ditto below */
+        } else if let tuplePattern = binding.pattern.as(TuplePatternSyntax.self) {
+            return tuplePattern.elements.map { element in
+                guard let identifierPattern = element.pattern
+                    .as(IdentifierPatternSyntax.self)
+                else {
+                    preconditionFailure(
+                        "I don't know how to handle a binding in a tuple that's not an identifier: \(binding.pattern)"
+                    )
+                }
+                return identifierPattern.identifier.text /* is this correct? */
+            }
+
+        } else {
+            preconditionFailure(
+                "I don’t know how to handle bindings with patterns other than an identifier or a tuple: \(binding.pattern)"
+            )
+        }
     }
 }

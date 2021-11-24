@@ -81,7 +81,8 @@ enum SyntaxManipulationHelpers {
 
             // Add trailing comma to final param (or penultimate if has trailing closure)
             var newFinalParam = finalParam
-            newFinalParam = newFinalParam.withTrailingComma(SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)))
+            newFinalParam = newFinalParam
+                .withTrailingComma(SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)))
             parameterList = parameterList.replacing(
                 childAt: parameterList.count - (hasTrailingClosure ? 2 : 1),
                 with: newFinalParam
@@ -89,7 +90,8 @@ enum SyntaxManipulationHelpers {
         }
 
         var newParam = param
-        newParam.trailingComma = hasTrailingClosure ? SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)) : nil
+        newParam.trailingComma = hasTrailingClosure ? SyntaxFactory.makeCommaToken()
+            .withTrailingTrivia(.spaces(1)) : nil
         parameterList = parameterList.inserting(
             newParam,
             at: hasTrailingClosure ? parameterList.count - 1 : parameterList.count
@@ -162,7 +164,8 @@ enum SyntaxManipulationHelpers {
         if !newArgumentList.isEmpty {
             let index = newArgumentList.index(newArgumentList.endIndex, offsetBy: -1)
             var newArgument = newArgumentList[index]
-            newArgument = newArgument.withTrailingComma(SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)))
+            newArgument = newArgument
+                .withTrailingComma(SyntaxFactory.makeCommaToken().withTrailingTrivia(.spaces(1)))
             newArgumentList = newArgumentList.replacing(
                 childAt: newArgumentList.count - 1,
                 with: newArgument
@@ -286,10 +289,12 @@ enum SyntaxManipulationHelpers {
             return SyntaxFactory.makeSwitchCase(
                 unknownAttr: nil,
                 label: Syntax(SyntaxFactory
-                    .makeSwitchCaseLabel(caseKeyword: SyntaxFactory.makeCaseKeyword()
-                        .withTrailingTrivia(.spaces(1)),
+                    .makeSwitchCaseLabel(
+                        caseKeyword: SyntaxFactory.makeCaseKeyword()
+                            .withTrailingTrivia(.spaces(1)),
                         caseItems: SyntaxFactory.makeCaseItemList([caseItem]),
-                                         colon: SyntaxFactory.makeColonToken())).withTrailingTrivia(.newlines(1)),
+                        colon: SyntaxFactory.makeColonToken()
+                    )).withTrailingTrivia(.newlines(1)),
                 statements: SyntaxFactory.makeCodeBlockItemList([SyntaxFactory.makeCodeBlockItem(
                     item: Syntax(functionCallExpression),
                     semicolon: nil,
@@ -308,7 +313,8 @@ enum SyntaxManipulationHelpers {
                 identifier: SyntaxFactory.makeIdentifier("testCase").withTrailingTrivia(.spaces(1)),
                 declNameArguments: nil
             )),
-            leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withTrailingTrivia(.newlines(1)),
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1))
+                .withTrailingTrivia(.newlines(1)),
             cases: caseList,
             rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
         ).withLeadingTrivia(.newlines(2))
@@ -338,7 +344,8 @@ enum SyntaxManipulationHelpers {
             return SyntaxFactory.makeMemberDeclListItem(decl: DeclSyntax(caseDecl), semicolon: nil)
         })
         let memberDeclBlock = SyntaxFactory.makeMemberDeclBlock(
-            leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withTrailingTrivia(.newlines(1)),
+            leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1))
+                .withTrailingTrivia(.newlines(1)),
             members: members,
             rightBrace: SyntaxFactory.makeRightBraceToken().withTrailingTrivia(.newlines(1))
         )
@@ -420,7 +427,8 @@ enum SyntaxManipulationHelpers {
             ),
             genericWhereClause: nil,
             body: SyntaxFactory.makeCodeBlock(
-                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withLeadingTrivia(.spaces(1)),
+                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1))
+                    .withLeadingTrivia(.spaces(1)),
                 statements: statements,
                 rightBrace: SyntaxFactory.makeRightBraceToken()
             )
@@ -500,7 +508,8 @@ enum SyntaxManipulationHelpers {
             ),
             genericWhereClause: nil,
             body: SyntaxFactory.makeCodeBlock(
-                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1)).withTrailingTrivia(.newlines(1)),
+                leftBrace: SyntaxFactory.makeLeftBraceToken().withLeadingTrivia(.spaces(1))
+                    .withTrailingTrivia(.newlines(1)),
                 statements: statements,
                 rightBrace: SyntaxFactory.makeRightBraceToken().withLeadingTrivia(.newlines(1))
             )
